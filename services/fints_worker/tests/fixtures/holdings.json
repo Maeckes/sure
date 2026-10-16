@@ -1,0 +1,22 @@
+[
+  {
+    "isin": "DE000DUMMY001",
+    "name": "Dummy Global Equity ETF",
+    "quantity": "12.345678901234567890",
+    "unit_price": "101.23456789",
+    "currency": "EUR",
+    "valuation_date": "2026-10-15",
+    "total_value": "1249.81",
+    "acquisition_price": "87.654321"
+  },
+  {
+    "isin": "DE000DUMMY002",
+    "name": "Dummy Bond 2026",
+    "quantity": "3",
+    "unit_price": "99.5",
+    "currency": "EUR",
+    "valuation_date": "2026-10-15",
+    "total_value": "298.5",
+    "acquisition_price": null
+  }
+]

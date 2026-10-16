@@ -947,6 +947,15 @@ Rails.application.routes.draw do
     end
   end
 
+  resources :fints_items, only: %i[create destroy] do
+    member do
+      post :discover
+      get :accounts
+      post :map_account
+      post :sync
+    end
+  end
+
   resources :sophtron_items, only: %i[index new create show edit update destroy] do
     collection do
       get :preload_accounts

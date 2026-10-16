@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_11_151000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_16_193000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -1110,6 +1110,49 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_11_151000) do
     t.datetime "updated_at", null: false
     t.index ["family_id"], name: "index_fio_items_on_family_id"
     t.index ["status"], name: "index_fio_items_on_status"
+  end
+
+  create_table "fints_accounts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "account_fingerprint"
+    t.boolean "balance_available", default: false, null: false
+    t.datetime "created_at", null: false
+    t.string "currency", null: false
+    t.decimal "current_balance", precision: 19, scale: 4
+    t.uuid "fints_item_id", null: false
+    t.date "history_synced_from"
+    t.string "iban_mask"
+    t.boolean "ignored", default: false, null: false
+    t.string "name", null: false
+    t.string "remote_account_key", null: false
+    t.string "remote_account_type"
+    t.date "transactions_synced_through"
+    t.boolean "transactions_supported", default: false, null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_fingerprint"], name: "index_fints_accounts_on_account_fingerprint"
+    t.index ["fints_item_id", "remote_account_key"], name: "index_fints_accounts_on_item_and_remote_key", unique: true
+    t.index ["fints_item_id"], name: "index_fints_accounts_on_fints_item_id"
+  end
+
+  create_table "fints_items", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "bank_code", null: false
+    t.string "bank_name", null: false
+    t.text "client_state"
+    t.datetime "created_at", null: false
+    t.text "customer_id"
+    t.string "endpoint", null: false
+    t.uuid "family_id", null: false
+    t.string "name", null: false
+    t.boolean "pending_account_setup", default: false, null: false
+    t.text "pin", null: false
+    t.text "private_state"
+    t.boolean "scheduled_for_deletion", default: false, null: false
+    t.string "status", default: "good", null: false
+    t.string "tan_mechanism"
+    t.string "tan_medium"
+    t.datetime "updated_at", null: false
+    t.text "user_id", null: false
+    t.index ["family_id"], name: "index_fints_items_on_family_id"
+    t.index ["status"], name: "index_fints_items_on_status"
   end
 
   create_table "goal_accounts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -3021,6 +3064,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_11_151000) do
   add_foreign_key "financekit_transactions", "financekit_accounts", on_delete: :nullify
   add_foreign_key "fio_accounts", "fio_items"
   add_foreign_key "fio_items", "families"
+  add_foreign_key "fints_accounts", "fints_items"
+  add_foreign_key "fints_items", "families"
   add_foreign_key "goal_accounts", "accounts", on_delete: :restrict
   add_foreign_key "goal_accounts", "goals", on_delete: :cascade
   add_foreign_key "goal_pledges", "accounts", on_delete: :restrict

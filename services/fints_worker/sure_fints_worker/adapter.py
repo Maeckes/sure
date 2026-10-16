@@ -544,7 +544,7 @@ def _advance(
                 result = resumed if resumed is not None else client.get_balance(
                     _account_from_wire(accounts[index])
                 )
-            except (FinTSNoResponseError, FinTSUnsupportedOperation):
+            except (FinTSNoResponseError, FinTSUnsupportedOperation, FinTSDialogError):
                 result = None
             resumed = None
             if isinstance(result, NeedTANResponse):
@@ -573,12 +573,21 @@ def _advance(
                 diagnostic["status"] = "unsupported"
                 index += 1
                 continue
-            result = resumed if resumed is not None else client.get_transactions(
-                _account_from_wire(accounts[index]),
-                dt.date.fromisoformat(window["startDate"]),
-                dt.date.fromisoformat(window["endDate"]),
-                include_pending=False,
-            )
+            try:
+                result = resumed if resumed is not None else client.get_transactions(
+                    _account_from_wire(accounts[index]),
+                    dt.date.fromisoformat(window["startDate"]),
+                    dt.date.fromisoformat(window["endDate"]),
+                    include_pending=False,
+                )
+            except FinTSUnsupportedOperation:
+                diagnostic["status"] = "unsupported"
+                index += 1
+                continue
+            except (FinTSNoResponseError, FinTSDialogError):
+                diagnostic["status"] = "unavailable"
+                index += 1
+                continue
             resumed = None
             if isinstance(result, NeedTANResponse):
                 return PendingChallenge(result, stage, index, accounts, output)

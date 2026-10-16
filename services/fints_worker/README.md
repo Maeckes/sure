@@ -21,3 +21,10 @@ trades, and `acquisitionPrice` is deliberately not labelled as cost basis.
 Known follow-ups include full connection-time DNS pinning, TAN mechanism/media
 selection, and photoTAN/Flicker variants not exposed as a matrix image by
 `python-fints`.
+
+The Rails integration requires `FINTS_PRODUCT_ID` to contain the operator's
+registered FinTS product identifier. `FINTS_PYTHON`, `FINTS_WORKER_PATH`,
+`FINTS_WORKER_TIMEOUT`, and `FINTS_WORKER_OUTPUT_LIMIT` are optional runtime
+settings. Credentials, PINs, TANs, and serialized client/dialog state are never
+configuration variables; they cross the process boundary only in the single
+stdin request.

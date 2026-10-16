@@ -146,6 +146,18 @@ class PartialBalanceClient(HoldingsClient):
         return super().get_balance(account)
 
 
+class PartialTransactionFailureClient(HoldingsClient):
+    def get_information(self):
+        information = super().get_information()
+        information["accounts"][1]["supported_operations"][adapter.FinTSOperations.GET_TRANSACTIONS] = True
+        return information
+
+    def get_transactions(self, account, start_date, end_date, include_pending=True):
+        if account.accountnumber == DEPOT.accountnumber:
+            raise FinTSDialogInitError("dummy per-account rejection")
+        return super().get_transactions(account, start_date, end_date, include_pending)
+
+
 class UnsupportedAccountsClient(HoldingsClient):
     def get_sepa_accounts(self):
         raise FinTSUnsupportedOperation("dummy unsupported HKSPA")
@@ -282,6 +294,20 @@ class AdapterTest(unittest.TestCase):
         self.assertEqual(transaction["valueDate"], "2026-01-03")
         self.assertEqual(transaction["counterpartyName"], "Dummy Shop")
         self.assertEqual(result["accounts"][0]["transactionSync"]["status"], "completed")
+
+    def test_transaction_failure_is_isolated_per_account(self):
+        value = request("transactions")
+        value["accountWindows"].append({
+            "remoteAccountKey": adapter._remote_account_key(adapter._account_wire(DEPOT)),
+            "startDate": "2026-01-01",
+            "endDate": "2026-01-31",
+        })
+        with patch.object(adapter, "FinTS3PinTanClient", PartialTransactionFailureClient):
+            result = adapter.run_request(value)
+
+        self.assertEqual(result["kind"], "success")
+        self.assertEqual(result["accounts"][0]["transactionSync"]["status"], "completed")
+        self.assertEqual(result["accounts"][1]["transactionSync"]["status"], "unavailable")
 
     def test_mt940_keeps_account_identifier_name_and_purpose_separate(self):
         statement = """:20:DUMMY

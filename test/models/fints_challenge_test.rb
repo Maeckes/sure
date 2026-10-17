@@ -106,6 +106,14 @@ class FintsChallengeTest < ActiveSupport::TestCase
     assert_not FintsChallenge.exists?(issued.challenge.id)
   end
 
+  test "atomic consumption removes state that expires while being claimed" do
+    issued = issue
+    issued.challenge.update_column(:expires_at, 1.second.ago)
+
+    assert_raises(FintsChallenge::Expired) { issued.challenge.consume! }
+    assert_not FintsChallenge.exists?(issued.challenge.id)
+  end
+
   test "rejects a different user in the same family" do
     issued = issue
 

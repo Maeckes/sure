@@ -48,7 +48,7 @@ class FintsChallenge < ApplicationRecord
       raise Invalid, "Invalid FinTS challenge" unless operation.to_s.in?(OPERATIONS)
 
       token = SecureRandom.urlsafe_base64(32)
-      expired.delete_all
+      where(fints_item: fints_item).expired.delete_all
       challenge = create!(
         family: family,
         user: user,
@@ -111,13 +111,20 @@ class FintsChallenge < ApplicationRecord
   end
 
   def consume!
+    state = nil
+    expired_during_claim = false
     transaction do
       lock!
-      expire_if_needed!
-      state = State.new(operation, worker_state, expires_at)
+      if expires_at.future?
+        state = State.new(operation, worker_state, expires_at)
+      else
+        expired_during_claim = true
+      end
       destroy!
-      state
     end
+    raise Expired, "FinTS challenge has expired" if expired_during_claim
+
+    state
   rescue ActiveRecord::RecordNotFound, ActiveRecord::StaleObjectError
     raise Invalid, "FinTS challenge is invalid"
   end

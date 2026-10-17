@@ -19,6 +19,7 @@ class FintsItem < ApplicationRecord
 
   belongs_to :family
   has_many :fints_accounts, dependent: :destroy
+  has_many :fints_challenges, dependent: :destroy
   has_many :accounts, through: :fints_accounts
 
   validates :name, :bank_name, :bank_code, :endpoint, :user_id, :pin, presence: true
@@ -41,6 +42,14 @@ class FintsItem < ApplicationRecord
 
   def import_latest_fints_data(worker: Fints::WorkerClient.new)
     FintsItem::Importer.new(self, worker: worker).import
+  end
+
+  def continue_fints_challenge!(operation:, worker_state:, tan:, worker: Fints::WorkerClient.new)
+    FintsItem::Importer.new(self, worker: worker).continue(
+      operation: operation,
+      worker_state: worker_state,
+      tan: tan
+    )
   end
 
   def process_accounts

@@ -1,5 +1,6 @@
 class User < ApplicationRecord
   has_many :financekit_items, dependent: :destroy
+  has_many :fints_challenges, dependent: :destroy
 
   include Encryptable
 

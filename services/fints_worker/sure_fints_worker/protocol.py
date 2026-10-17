@@ -5,7 +5,7 @@ from typing import Any
 
 
 ERROR_CODES = {"AUTHENTICATION_FAILED", "NETWORK_ERROR", "UNSUPPORTED", "BANK_ERROR"}
-OPERATIONS = {"test", "discover", "transactions", "holdings", "continue"}
+OPERATIONS = {"test", "discover", "transactions", "holdings", "sync", "continue"}
 ACCOUNT_KEY_LENGTH = 64
 
 
@@ -114,16 +114,16 @@ def validate_request(value: Any) -> dict[str, Any]:
     if not request["bankCode"].isdigit():
         raise ProtocolError("Invalid worker request.")
 
-    if operation == "transactions":
+    if operation in {"transactions", "sync"}:
         request["accountWindows"] = _account_windows(value.get("accountWindows"))
-    elif operation == "holdings":
+    if operation in {"holdings", "sync"}:
         request["remoteAccountKeys"] = _account_keys(value.get("remoteAccountKeys"))
-    elif operation == "continue":
+    if operation == "continue":
         continuation = value.get("continuation")
         if not isinstance(continuation, dict):
             raise ProtocolError("Invalid worker request.")
         original = _string(continuation.get("operation"), minimum=1, maximum=20)
-        if original not in {"test", "discover", "transactions", "holdings"}:
+        if original not in {"test", "discover", "transactions", "holdings", "sync"}:
             raise ProtocolError("Invalid worker request.")
         request["continuation"] = {
             "operation": original,

@@ -43,10 +43,19 @@ class ProtocolTest(unittest.TestCase):
         with self.assertRaises(ProtocolError):
             validate_request(request)
 
-    def test_rejects_legacy_sync_operation_name(self):
+    def test_sync_requires_transaction_windows_and_holding_keys(self):
         request = base_request("sync")
-        with self.assertRaises(ProtocolError):
-            validate_request(request)
+        request["accountWindows"] = [{
+            "remoteAccountKey": "a" * 64,
+            "startDate": "2026-01-01",
+            "endDate": "2026-01-31",
+        }]
+        request["remoteAccountKeys"] = ["b" * 64]
+
+        validated = validate_request(request)
+
+        self.assertEqual(validated["accountWindows"], request["accountWindows"])
+        self.assertEqual(validated["remoteAccountKeys"], ["b" * 64])
 
     def test_continue_accepts_tan_or_decoupled_status_check(self):
         request = base_request("continue")

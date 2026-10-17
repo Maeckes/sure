@@ -11,7 +11,7 @@ expires.
 
 ```json
 {
-  "operation": "test | discover | transactions | holdings | continue",
+  "operation": "test | discover | transactions | holdings | sync | continue",
   "productId": "registered-product-id",
   "bankCode": "12345678",
   "endpoint": "https://bank.example/fints",
@@ -45,6 +45,10 @@ expires.
   "remoteAccountKeys": ["64-lowercase-hex-characters"]
 }
 ```
+
+`sync` carries both `accountWindows` and `remoteAccountKeys`. It processes the
+selected cash-account transactions and depot snapshots in one resumable FinTS
+dialog so a challenge between stages does not require a second login.
 
 `continue` resumes a challenge returned by the worker:
 

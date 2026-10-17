@@ -19,6 +19,7 @@ from sure_fints_worker import adapter
 
 ACCOUNT = SEPAAccount("DE02120300000000202051", "BYLADEM1001", "202051", "", "12030000")
 DEPOT = SEPAAccount(None, None, "7654321", "", "12030000")
+DEPOT_TWO = SEPAAccount(None, None, "7654322", "", "12030000")
 
 
 def account_info(account, *, balance=True, transactions=True, holdings=False, name="Dummy account"):
@@ -189,6 +190,21 @@ class UnsupportedHoldingsClient(HoldingsClient):
         raise FinTSUnsupportedOperation("dummy unsupported HKWPD")
 
 
+class IsolatedHoldingsFailureClient(HoldingsClient):
+    def get_information(self):
+        information = super().get_information()
+        information["accounts"].append(account_info(
+            DEPOT_TWO, balance=False, transactions=False, holdings=True,
+            name="Second dummy securities account",
+        ))
+        return information
+
+    def get_holdings(self, account):
+        if account.accountnumber == DEPOT.accountnumber:
+            raise FinTSDialogInitError("dummy per-account HKWPD rejection")
+        return load_holding_fixture()
+
+
 class FakeChallenge:
     decoupled = False
     challenge = "Enter the test TAN"
@@ -242,6 +258,29 @@ class HoldingsChallengeClient(HoldingsClient):
         return load_holding_fixture()
 
 
+class RepeatedHoldingsChallengeClient(HoldingsClient):
+    continuation_count = 0
+
+    def get_holdings(self, _account):
+        return FakeChallenge()
+
+    def send_tan(self, _challenge, tan):
+        assert tan == "123456"
+        type(self).continuation_count += 1
+        if type(self).continuation_count == 1:
+            return FakeChallenge()
+        return load_holding_fixture()
+
+
+class DecoupledHoldingsChallengeClient(HoldingsClient):
+    def get_holdings(self, _account):
+        return DecoupledChallenge()
+
+    def send_tan(self, _challenge, tan):
+        assert tan == ""
+        return load_holding_fixture()
+
+
 class BankErrorClient(FakeClient):
     def __enter__(self):
         self._process_response(
@@ -271,13 +310,13 @@ def request(operation="discover"):
         "tanMechanism": None,
         "tanMedium": None,
     }
-    if operation == "transactions":
+    if operation in {"transactions", "sync"}:
         value["accountWindows"] = [{
             "remoteAccountKey": adapter._remote_account_key(adapter._account_wire(ACCOUNT)),
             "startDate": "2026-01-01",
             "endDate": "2026-01-31",
         }]
-    if operation == "holdings":
+    if operation in {"holdings", "sync"}:
         value["remoteAccountKeys"] = [
             adapter._remote_account_key(adapter._account_wire(DEPOT))
         ]
@@ -389,6 +428,48 @@ class AdapterTest(unittest.TestCase):
         self.assertEqual(result["accounts"][1]["holdings"], [])
         self.assertEqual(result["accounts"][1]["holdingsSync"]["status"], "unsupported")
 
+    def test_combined_sync_processes_cash_transactions_and_depot_holdings(self):
+        with patch.object(adapter, "FinTS3PinTanClient", HoldingsClient):
+            result = adapter.run_request(request("sync"))
+
+        self.assertEqual(result["kind"], "success")
+        self.assertEqual(result["accounts"][0]["transactionSync"]["status"], "completed")
+        self.assertEqual(result["accounts"][1]["holdingsSync"]["status"], "completed")
+
+    def test_one_failed_depot_does_not_block_another_depot(self):
+        value = request("holdings")
+        value["remoteAccountKeys"].append(
+            adapter._remote_account_key(adapter._account_wire(DEPOT_TWO))
+        )
+        with patch.object(adapter, "FinTS3PinTanClient", IsolatedHoldingsFailureClient):
+            result = adapter.run_request(value)
+
+        self.assertEqual(result["kind"], "success")
+        self.assertEqual(result["accounts"][1]["holdingsSync"]["status"], "unavailable")
+        self.assertEqual(result["accounts"][2]["holdingsSync"]["status"], "completed")
+
+    def test_invalid_holding_is_discarded_without_losing_valid_positions(self):
+        invalid = SimpleNamespace(
+            ISIN="DE000DUMMY03", name="Invalid", pieces="not-a-number",
+            market_value=Decimal("1"), value_symbol="EUR",
+            valuation_date=dt.date(2026, 10, 15), total_value=Decimal("1"),
+            acquisitionprice=None,
+        )
+
+        class PartiallyInvalidHoldingsClient(HoldingsClient):
+            holdings = [invalid, *load_holding_fixture()]
+
+            def get_holdings(self, _account):
+                return self.holdings
+
+        with patch.object(adapter, "FinTS3PinTanClient", PartiallyInvalidHoldingsClient):
+            result = adapter.run_request(request("holdings"))
+
+        diagnostic = result["accounts"][1]["holdingsSync"]
+        self.assertEqual(diagnostic["received"], 3)
+        self.assertEqual(diagnostic["normalized"], 2)
+        self.assertEqual(diagnostic["discarded"], 1)
+
     def test_holdings_tan_challenge_resumes_at_same_account(self):
         with patch.object(adapter, "FinTS3PinTanClient", HoldingsChallengeClient), patch.object(
             adapter, "NeedTANResponse", FakeChallenge
@@ -407,6 +488,44 @@ class AdapterTest(unittest.TestCase):
             adapter, "NeedTANResponse", FakeChallenge
         ), patch.object(adapter.NeedRetryResponse, "from_data", return_value=FakeChallenge()):
             result = adapter.run_request(continued)
+        self.assertEqual(result["kind"], "success")
+        self.assertEqual(result["accounts"][1]["holdingsSync"]["status"], "completed")
+
+    def test_holdings_can_resume_through_a_second_challenge(self):
+        RepeatedHoldingsChallengeClient.continuation_count = 0
+        with patch.object(adapter, "FinTS3PinTanClient", RepeatedHoldingsChallengeClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ):
+            result = adapter.run_request(request("holdings"))
+
+        for expected_kind in ("challenge", "success"):
+            continued = request("continue")
+            continued["continuation"] = {
+                "operation": "holdings", "workerState": result["workerState"], "tan": "123456",
+            }
+            with patch.object(adapter, "FinTS3PinTanClient", RepeatedHoldingsChallengeClient), patch.object(
+                adapter, "NeedTANResponse", FakeChallenge
+            ), patch.object(adapter.NeedRetryResponse, "from_data", return_value=FakeChallenge()):
+                result = adapter.run_request(continued)
+            self.assertEqual(result["kind"], expected_kind)
+
+        self.assertEqual(result["accounts"][1]["holdingsSync"]["status"], "completed")
+
+    def test_holdings_decoupled_challenge_resumes_without_tan(self):
+        with patch.object(adapter, "FinTS3PinTanClient", DecoupledHoldingsChallengeClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ):
+            first = adapter.run_request(request("holdings"))
+
+        continued = request("continue")
+        continued["continuation"] = {
+            "operation": "holdings", "workerState": first["workerState"], "tan": None,
+        }
+        with patch.object(adapter, "FinTS3PinTanClient", DecoupledHoldingsChallengeClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ), patch.object(adapter.NeedRetryResponse, "from_data", return_value=DecoupledChallenge()):
+            result = adapter.run_request(continued)
+
         self.assertEqual(result["kind"], "success")
         self.assertEqual(result["accounts"][1]["holdingsSync"]["status"], "completed")
 

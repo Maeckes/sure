@@ -535,7 +535,7 @@ def _advance(
             if index >= len(accounts):
                 if operation == "discover":
                     return None
-                if operation == "transactions":
+                if operation in {"transactions", "sync"}:
                     stage, index = "transactions", 0
                 elif operation == "holdings":
                     stage, index = "holdings", 0
@@ -559,6 +559,9 @@ def _advance(
             index += 1
         elif stage == "transactions":
             if index >= len(accounts):
+                if operation == "sync":
+                    stage, index = "holdings", 0
+                    continue
                 return None
             windows = {
                 window["remoteAccountKey"]: window
@@ -626,7 +629,7 @@ def _advance(
             except FinTSUnsupportedOperation:
                 result = None
                 diagnostic["status"] = "unsupported"
-            except FinTSNoResponseError:
+            except (FinTSNoResponseError, FinTSDialogError):
                 result = None
                 diagnostic["status"] = "unavailable"
             resumed = None
@@ -634,7 +637,12 @@ def _advance(
                 return PendingChallenge(result, stage, index, accounts, output)
             if result is not None:
                 holdings = list(result)
-                normalized = [_normalize_holding(holding) for holding in holdings]
+                normalized = []
+                for holding in holdings:
+                    try:
+                        normalized.append(_normalize_holding(holding))
+                    except ProtocolError:
+                        continue
                 output[index]["holdings"] = normalized
                 diagnostic.update(
                     status="completed",
@@ -714,9 +722,9 @@ def _parse_state(request: dict[str, Any]) -> dict[str, Any]:
         for key in ("client", "dialog", "challenge", "stage", "accounts", "output"):
             if key not in state:
                 raise ValueError
-        if state["operation"] == "transactions":
+        if state["operation"] in {"transactions", "sync"}:
             request["accountWindows"] = _account_windows(state.get("accountWindows"))
-        if state["operation"] == "holdings":
+        if state["operation"] in {"holdings", "sync"}:
             request["remoteAccountKeys"] = _account_keys(state.get("remoteAccountKeys"))
         return state
     except (KeyError, TypeError, ValueError, json.JSONDecodeError, ProtocolError) as exc:

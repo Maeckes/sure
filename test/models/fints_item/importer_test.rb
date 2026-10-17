@@ -62,6 +62,15 @@ class FintsItem::ImporterTest < ActiveSupport::TestCase
     assert_equal existing, second.reload.account
   end
 
+  test "mapping refuses an account already owned by another provider" do
+    remote = @item.fints_accounts.create!(remote_account_key: "3" * 64, name: "Savings", currency: "EUR")
+    existing = accounts(:depository)
+    AccountProvider.create!(account: existing, provider: fio_accounts(:checking))
+
+    assert_raises(ArgumentError) { remote.link_to_existing!(existing) }
+    assert_nil remote.reload.account_provider
+  end
+
   test "uses 90 days initially and seven day overlap after a completed sync" do
     remote = linked_remote("f")
     first_worker = FakeWorker.new([ success(accounts: [ transaction_account(remote, start_date: (Date.current - 90.days).iso8601) ]) ])

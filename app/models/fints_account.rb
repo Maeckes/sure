@@ -23,6 +23,8 @@ class FintsAccount < ApplicationRecord
   def link_to_existing!(linked_account)
     raise ArgumentError, "account must belong to the same family" unless linked_account.family_id == fints_item.family_id
     raise ArgumentError, "only depository accounts can be linked" unless linked_account.accountable_type == "Depository"
+    raise ArgumentError, "remote account is already linked" if account_provider.present?
+    raise ArgumentError, "account is already linked to a provider" if linked_account.account_providers.exists?
 
     create_account_provider!(account: linked_account)
   end

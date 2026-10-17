@@ -35,6 +35,44 @@ class Fints::WorkerClientTest < ActiveSupport::TestCase
     script&.close!
   end
 
+  test "accepts bounded decimal-string holdings without converting them to floats" do
+    response = success_response
+    account = response.fetch("accounts").first
+    account["holdings"] = [ {
+      "isin" => "DE000DUMMY01", "name" => "Dummy fund",
+      "quantity" => "12.34567890123456789", "unitPrice" => "101.23456789",
+      "currency" => "EUR", "valuationDate" => "2026-10-15",
+      "totalValue" => "1249.81", "acquisitionPrice" => "87.654321"
+    } ]
+    account["holdingsSync"] = { "status" => "completed", "received" => 1, "normalized" => 1, "discarded" => 0 }
+    script = ruby_worker("STDIN.read; STDOUT.write(JSON.generate(#{response.inspect}))")
+
+    result = client_for(script).call(operation: :holdings, credentials: @credentials, remoteAccountKeys: [ "a" * 64 ])
+
+    assert_equal "12.34567890123456789", result.accounts.first.dig("holdings", 0, "quantity")
+    assert_instance_of String, result.accounts.first.dig("holdings", 0, "unitPrice")
+  ensure
+    script&.close!
+  end
+
+  test "rejects numeric holding decimals" do
+    response = success_response
+    account = response.fetch("accounts").first
+    account["holdings"] = [ {
+      "isin" => "DE000DUMMY01", "name" => "Dummy fund", "quantity" => 12.5,
+      "unitPrice" => "1", "currency" => "EUR", "valuationDate" => "2026-10-15",
+      "totalValue" => "12.5", "acquisitionPrice" => nil
+    } ]
+    account["holdingsSync"] = { "status" => "completed", "received" => 1, "normalized" => 1, "discarded" => 0 }
+    script = ruby_worker("STDIN.read; STDOUT.write(JSON.generate(#{response.inspect}))")
+
+    assert_raises(Fints::WorkerClient::ProtocolError) do
+      client_for(script).call(operation: :holdings, credentials: @credentials, remoteAccountKeys: [ "a" * 64 ])
+    end
+  ensure
+    script&.close!
+  end
+
   test "accepts a bounded PNG matrix challenge" do
     image = "data:image/png;base64,iVBORw0KGgo="
     script = ruby_worker("STDIN.read; STDOUT.write(JSON.generate({kind: 'challenge', challengeType: 'tan', message: 'Confirm', challengeImage: '#{image}', workerState: 'opaque'}))")
@@ -112,7 +150,9 @@ class Fints::WorkerClientTest < ActiveSupport::TestCase
         "kind" => "success", "clientState" => "opaque", "tanMechanism" => nil, "tanMedium" => nil,
         "accounts" => [ {
           "remoteAccountKey" => "a" * 64, "name" => "Checking", "currency" => "EUR",
-          "transactions" => [], "transactionSync" => { "status" => "not_requested" }
+          "transactions" => [], "transactionSync" => { "status" => "not_requested" },
+          "holdings" => [],
+          "holdingsSync" => { "status" => "not_requested", "received" => 0, "normalized" => 0, "discarded" => 0 }
         } ]
       }
     end

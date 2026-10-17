@@ -143,7 +143,9 @@ class Fints::WorkerClient
         optional_string?(account["name"], 500, required: true) && account["currency"].is_a?(String) && account["currency"].match?(/\A[A-Z]{3}\z/) &&
         (account["balance"].nil? || account["balance"].is_a?(Integer)) && account["transactions"].is_a?(Array) &&
         account["transactions"].size <= 100_000 && account["transactions"].all? { valid_transaction?(_1) } &&
-        valid_transaction_sync?(account["transactionSync"])
+        valid_transaction_sync?(account["transactionSync"]) && account["holdings"].is_a?(Array) &&
+        account["holdings"].size <= 100_000 && account["holdings"].all? { valid_holding?(_1) } &&
+        valid_holdings_sync?(account["holdingsSync"])
     end
 
     def valid_transaction?(transaction)
@@ -164,6 +166,45 @@ class Fints::WorkerClient
       Date.iso8601(value["endDate"])
       true
     rescue Date::Error, TypeError
+      false
+    end
+
+    def valid_holding?(holding)
+      return false unless holding.is_a?(Hash)
+      return false unless optional_string?(holding["isin"], 32)
+      return false unless optional_string?(holding["name"], 500)
+      return false unless decimal_string?(holding["quantity"], required: true)
+      return false unless decimal_string?(holding["unitPrice"])
+      return false unless decimal_string?(holding["totalValue"])
+      return false unless decimal_string?(holding["acquisitionPrice"])
+      return false unless optional_string?(holding["currency"], 3)
+      return false unless holding["currency"].nil? || holding["currency"].match?(/\A[A-Z]{3}\z/)
+      return false unless optional_date?(holding["valuationDate"])
+
+      true
+    end
+
+    def valid_holdings_sync?(value)
+      value.is_a?(Hash) && %w[not_requested requested completed unsupported unavailable].include?(value["status"]) &&
+        %w[received normalized discarded].all? { value[_1].is_a?(Integer) && value[_1] >= 0 }
+    end
+
+    def decimal_string?(value, required: false)
+      return !required if value.nil?
+      return false unless value.is_a?(String) && value.bytesize <= 200 && value.match?(/\A-?(?:0|[1-9]\d*)(?:\.\d+)?\z/)
+
+      BigDecimal(value).finite?
+    rescue ArgumentError
+      false
+    end
+
+    def optional_date?(value)
+      return true if value.nil?
+      return false unless value.is_a?(String)
+
+      Date.iso8601(value)
+      true
+    rescue Date::Error
       false
     end
 

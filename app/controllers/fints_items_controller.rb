@@ -16,7 +16,10 @@ class FintsItemsController < ApplicationController
     result = @fints_item.discover_accounts!
     case result
     when Fints::WorkerClient::Success
-      render json: { accounts: serialized_accounts }
+      respond_to do |format|
+        format.html { redirect_to accounts_fints_item_path(@fints_item) }
+        format.json { render json: { accounts: serialized_accounts } }
+      end
     when Fints::WorkerClient::Challenge
       render_challenge(result, operation: :discover)
     when Fints::WorkerClient::Failure
@@ -27,7 +30,13 @@ class FintsItemsController < ApplicationController
   end
 
   def accounts
-    render json: { accounts: serialized_accounts }
+    respond_to do |format|
+      format.html do
+        @fints_accounts = @fints_item.fints_accounts.order(:created_at)
+        @linkable_accounts = Current.family.accounts.where.not(id: AccountProvider.select(:account_id)).order(:name)
+      end
+      format.json { render json: { accounts: serialized_accounts } }
+    end
   end
 
   def map_account
@@ -39,16 +48,22 @@ class FintsItemsController < ApplicationController
     else
       remote.create_and_link_account!(name: params[:name].presence || remote.name, subtype: params[:subtype].presence || remote.suggested_subtype)
     end
-    render json: { account_id: linked.id, fints_account_id: remote.id }, status: :created
+    respond_to do |format|
+      format.html { redirect_to accounts_fints_item_path(@fints_item), notice: "FinTS account mapped." }
+      format.json { render json: { account_id: linked.id, fints_account_id: remote.id }, status: :created }
+    end
   rescue ActiveRecord::RecordInvalid, ArgumentError => error
-    render json: { error: error.message }, status: :unprocessable_entity
+    respond_to do |format|
+      format.html { redirect_to accounts_fints_item_path(@fints_item), alert: error.message }
+      format.json { render json: { error: error.message }, status: :unprocessable_entity }
+    end
   end
 
   def sync
     result = @fints_item.import_latest_fints_data
     case result
     when Fints::WorkerClient::Challenge
-      render_challenge(result, operation: :transactions)
+      render_challenge(result, operation: :sync)
     when Fints::WorkerClient::Failure
       render json: { error: result.message, code: result.code }, status: :unprocessable_entity
     else
@@ -92,7 +107,12 @@ class FintsItemsController < ApplicationController
           id: account.id, name: account.name, account_type: account.remote_account_type,
           currency: account.currency, identifier: account.iban_mask,
           balance: account.balance_available? ? account.current_balance : nil,
-          suggested_subtype: account.suggested_subtype, mapped_account_id: account.account&.id
+          suggested_accountable_type: account.suggested_accountable_type,
+          suggested_subtype: account.suggested_subtype,
+          supports_holdings: account.holdings_supported?,
+          holdings_status: account.holdings_status,
+          holdings_synced_on: account.holdings_synced_on,
+          mapped_account_id: account.account&.id
         }
       end
     end

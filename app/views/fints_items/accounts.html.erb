@@ -1,0 +1,73 @@
+<% content_for :title, t(".page_title") %>
+
+<%= render DS::Dialog.new(disable_click_outside: true) do |dialog| %>
+  <% dialog.with_header(title: t(".title")) do %>
+    <div class="flex items-center gap-2">
+      <%= icon "landmark", class: "text-primary" %>
+      <span class="text-primary"><%= @fints_item.bank_name %></span>
+    </div>
+  <% end %>
+
+  <% dialog.with_body do %>
+    <div class="space-y-4">
+      <%= render DS::Alert.new(message: t(".explanation"), variant: :info) %>
+
+      <% @fints_accounts.each do |remote| %>
+        <div class="border border-primary rounded-lg p-4 space-y-3">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h3 class="font-medium text-primary"><%= remote.name %></h3>
+              <p class="text-sm text-secondary">
+                <%= t(".account_summary", type: t(".types.#{remote.investment? ? "investment" : "depository"}"), currency: remote.currency) %>
+              </p>
+              <% if remote.iban_mask.present? %>
+                <p class="text-xs text-secondary privacy-sensitive"><%= remote.iban_mask %></p>
+              <% end %>
+            </div>
+            <span class="text-xs text-secondary"><%= t(".holdings_status.#{remote.holdings_status}") if remote.investment? %></span>
+          </div>
+
+          <% if remote.account %>
+            <%= render DS::Alert.new(
+                  message: t(".mapped_to", account: remote.account.name),
+                  variant: :success
+                ) %>
+          <% else %>
+            <%= form_with url: map_account_fints_item_path(@fints_item), method: :post, data: { turbo_frame: "_top" }, class: "flex items-end gap-2" do |form| %>
+              <%= form.hidden_field :fints_account_id, value: remote.id %>
+              <%= form.hidden_field :subtype, value: remote.suggested_subtype %>
+              <div class="flex-1">
+                <%= form.label :name, t(".new_account_name"), class: "form-field__label" %>
+                <%= form.text_field :name, value: remote.name, class: "form-field__input", required: true %>
+              </div>
+              <%= render DS::Button.new(text: t(".create_account"), icon: "plus", type: :submit) %>
+            <% end %>
+
+            <% candidates = @linkable_accounts.select { _1.accountable_type == remote.suggested_accountable_type } %>
+            <% if candidates.any? %>
+              <%= form_with url: map_account_fints_item_path(@fints_item), method: :post, data: { turbo_frame: "_top" }, class: "flex items-end gap-2" do |form| %>
+                <%= form.hidden_field :fints_account_id, value: remote.id %>
+                <div class="flex-1">
+                  <%= form.label :account_id, t(".existing_account"), class: "form-field__label" %>
+                  <%= form.select :account_id,
+                        options_for_select(candidates.map { [ _1.name, _1.id ] }),
+                        { prompt: t(".select_account") },
+                        { class: "form-field__input", required: true } %>
+                </div>
+                <%= render DS::Button.new(text: t(".link_account"), icon: "link-2", variant: :secondary, type: :submit) %>
+              <% end %>
+            <% end %>
+          <% end %>
+        </div>
+      <% end %>
+
+      <div class="flex justify-end gap-2">
+        <%= render DS::Button.new(
+              text: t(".sync_now"), icon: "refresh-cw", variant: :secondary,
+              href: sync_fints_item_path(@fints_item), method: :post
+            ) %>
+        <%= render DS::Link.new(text: t(".done"), href: accounts_path, variant: :primary, frame: "_top") %>
+      </div>
+    </div>
+  <% end %>
+<% end %>

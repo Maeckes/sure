@@ -8,7 +8,7 @@ class Provider::FintsAdapter < Provider::Base
 
   Provider::Factory.register("FintsAccount", self)
 
-  def self.supported_account_types = %w[Depository]
+  def self.supported_account_types = %w[Depository Investment]
   def provider_name = "fints"
   def item = provider_account.fints_item
   def can_delete_holdings? = false

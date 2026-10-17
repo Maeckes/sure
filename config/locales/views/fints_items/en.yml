@@ -1,0 +1,23 @@
+en:
+  fints_items:
+    accounts:
+      page_title: "Set up FinTS accounts"
+      title: "FinTS accounts"
+      explanation: "Choose which discovered bank accounts to add. Accounts are created only after you confirm a mapping."
+      account_summary: "%{type} · %{currency}"
+      types:
+        depository: "Cash account"
+        investment: "Investment account"
+      new_account_name: "Account name"
+      create_account: "Create account"
+      existing_account: "Existing account"
+      select_account: "Select an account"
+      link_account: "Link"
+      mapped_to: "Mapped to %{account}"
+      sync_now: "Sync now"
+      done: "Done"
+      holdings_status:
+        not_requested: "Holdings not synced"
+        completed: "Holdings synced"
+        unsupported: "Holdings unavailable"
+        unavailable: "Holdings sync failed"

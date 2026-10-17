@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_17_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_18_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -1120,6 +1120,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_130000) do
     t.decimal "current_balance", precision: 19, scale: 4
     t.uuid "fints_item_id", null: false
     t.date "history_synced_from"
+    t.string "holdings_status", default: "not_requested", null: false
+    t.boolean "holdings_supported", default: false, null: false
+    t.date "holdings_synced_on"
     t.string "iban_mask"
     t.boolean "ignored", default: false, null: false
     t.string "name", null: false
@@ -1131,6 +1134,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_130000) do
     t.index ["account_fingerprint"], name: "index_fints_accounts_on_account_fingerprint"
     t.index ["fints_item_id", "remote_account_key"], name: "index_fints_accounts_on_item_and_remote_key", unique: true
     t.index ["fints_item_id"], name: "index_fints_accounts_on_fints_item_id"
+    t.check_constraint "holdings_status::text = ANY (ARRAY['not_requested'::character varying, 'completed'::character varying, 'unsupported'::character varying, 'unavailable'::character varying]::text[])", name: "chk_fints_accounts_holdings_status"
   end
 
   create_table "fints_challenges", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

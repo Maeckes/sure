@@ -49,6 +49,25 @@ class FintsItem::ImporterTest < ActiveSupport::TestCase
     assert_equal "savings", @item.fints_accounts.sole.suggested_subtype
   end
 
+  test "discovers an UPD-only depot without creating or mapping it" do
+    snapshot = account("Direkt-Depot", "Depot", "d", balance: nil).merge(
+      "iban" => nil, "accountNumber" => "7654321",
+      "supportsTransactions" => false, "supportsHoldings" => true
+    )
+    worker = FakeWorker.new([ success(accounts: [ snapshot ]) ])
+
+    assert_no_difference [ "Account.count", "AccountProvider.count" ] do
+      @item.discover_accounts!(worker: worker)
+    end
+
+    depot = @item.fints_accounts.sole
+    assert depot.holdings_supported?
+    assert depot.investment?
+    assert_equal "Investment", depot.suggested_accountable_type
+    assert_equal "brokerage", depot.suggested_subtype
+    assert_equal "•••• 4321", depot.iban_mask
+  end
+
   test "explicit mapping can create or reuse a depository account" do
     worker = FakeWorker.new([ success(accounts: [ account("Girokonto", "checking", "d") ]) ])
     @item.discover_accounts!(worker: worker)
@@ -128,6 +147,71 @@ class FintsItem::ImporterTest < ActiveSupport::TestCase
     assert_equal Date.current, remote.reload.transactions_synced_through
   end
 
+  test "sync requests cash transactions and investment holdings together" do
+    cash = linked_remote("f")
+    depot = linked_depot("d")
+    worker = FakeWorker.new([ success(accounts: [ transaction_account(cash), holdings_account(depot) ]) ])
+
+    result = @item.import_latest_fints_data(worker: worker)
+
+    request = worker.calls.sole
+    assert_equal :sync, request[:operation]
+    assert_equal [ cash.remote_account_key ], request[:accountWindows].pluck(:remoteAccountKey)
+    assert_equal [ depot.remote_account_key ], request[:remoteAccountKeys]
+    assert result[:success]
+    assert_equal "completed", depot.reload.holdings_status
+    assert_equal 1, depot.account.holdings.where.not(qty: 0).count
+  end
+
+  test "unsupported depot holdings do not block cash or another depot" do
+    cash = linked_remote("1")
+    unsupported = linked_depot("2")
+    working = linked_depot("3")
+    unsupported_snapshot = holdings_account(unsupported).merge(
+      "holdings" => [],
+      "holdingsSync" => holdings_sync("unsupported", received: 0, normalized: 0)
+    )
+    worker = FakeWorker.new([ success(accounts: [
+      transaction_account(cash), unsupported_snapshot, holdings_account(working)
+    ]) ])
+
+    result = @item.import_latest_fints_data(worker: worker)
+
+    assert result[:success]
+    assert_equal Date.current, cash.reload.transactions_synced_through
+    assert_equal "unsupported", unsupported.reload.holdings_status
+    assert_equal "completed", working.reload.holdings_status
+    assert_equal 1, working.account.holdings.where.not(qty: 0).count
+  end
+
+  test "a malformed depot snapshot does not block another depot" do
+    malformed = linked_depot("2")
+    working = linked_depot("3")
+    malformed_snapshot = holdings_account(malformed)
+    malformed_snapshot["holdings"].first["quantity"] = "not-a-decimal"
+    worker = FakeWorker.new([ success(accounts: [ malformed_snapshot, holdings_account(working) ]) ])
+
+    result = @item.import_latest_fints_data(worker: worker)
+
+    assert_not result[:success]
+    assert_equal "unavailable", malformed.reload.holdings_status
+    assert_equal "completed", working.reload.holdings_status
+    assert_equal 1, working.account.holdings.where.not(qty: 0).count
+  end
+
+  test "continues a combined holdings sync through the existing challenge path" do
+    depot = linked_depot("d")
+    worker = FakeWorker.new([ success(accounts: [ holdings_account(depot) ]) ])
+
+    result = FintsItem::Importer.new(@item, worker: worker).continue(
+      operation: "sync", worker_state: "paused-state", tan: "123456"
+    )
+
+    assert result[:success]
+    assert_equal "completed", depot.reload.holdings_status
+    assert_equal "sync", worker.calls.sole.dig(:continuation, :operation)
+  end
+
   test "sensitive attributes are encrypted at rest" do
     raw = FintsItem.connection.select_one("SELECT user_id, customer_id, pin FROM fints_items WHERE id = '#{@item.id}'")
     assert_not_equal "dummy-user", raw["user_id"]
@@ -141,8 +225,10 @@ class FintsItem::ImporterTest < ActiveSupport::TestCase
       {
         "remoteAccountKey" => key * 64, "name" => name, "accountType" => type,
         "currency" => "EUR", "iban" => "DE44500105175407320001", "accountNumber" => "0001",
-        "supportsTransactions" => true, "balance" => balance, "transactions" => [],
-        "transactionSync" => { "status" => "not_requested", "startDate" => nil, "endDate" => nil }
+        "supportsTransactions" => true, "supportsHoldings" => false,
+        "balance" => balance, "transactions" => [], "holdings" => [],
+        "transactionSync" => { "status" => "not_requested", "startDate" => nil, "endDate" => nil },
+        "holdingsSync" => holdings_sync("not_requested", received: 0, normalized: 0)
       }
     end
 
@@ -156,10 +242,38 @@ class FintsItem::ImporterTest < ActiveSupport::TestCase
       remote
     end
 
+    def linked_depot(key)
+      remote = @item.fints_accounts.create!(
+        remote_account_key: key * 64, name: "Depot #{key}", currency: "EUR",
+        transactions_supported: false, holdings_supported: true
+      )
+      remote.create_and_link_account!
+      remote
+    end
+
     def transaction_account(remote, start_date: (Date.current - 90.days).iso8601)
       account(remote.name, "checking", remote.remote_account_key.first).merge(
         "remoteAccountKey" => remote.remote_account_key,
         "transactionSync" => { "status" => "completed", "startDate" => start_date, "endDate" => Date.current.iso8601 }
       )
+    end
+
+    def holdings_account(remote)
+      account(remote.name, "Depot", remote.remote_account_key.first, balance: nil).merge(
+        "remoteAccountKey" => remote.remote_account_key,
+        "supportsTransactions" => false,
+        "supportsHoldings" => true,
+        "holdings" => [ {
+          "isin" => "DE000DUMMY01", "name" => "Dummy Equity Fund",
+          "quantity" => "12.34567890123456789", "unitPrice" => "101.23456789",
+          "currency" => "EUR", "valuationDate" => Date.current.iso8601,
+          "totalValue" => "1249.81", "acquisitionPrice" => "87.654321"
+        } ],
+        "holdingsSync" => holdings_sync("completed", received: 1, normalized: 1)
+      )
+    end
+
+    def holdings_sync(status, received:, normalized:)
+      { "status" => status, "received" => received, "normalized" => normalized, "discarded" => received - normalized }
     end
 end

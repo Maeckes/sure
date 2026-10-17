@@ -11,7 +11,7 @@ class FintsChallenge < ApplicationRecord
   end
 
   TTL = 5.minutes
-  OPERATIONS = %w[test discover transactions holdings].freeze
+  OPERATIONS = %w[test discover transactions holdings sync].freeze
   TYPES = %w[tan decoupled].freeze
 
   Issued = Data.define(:challenge, :token)

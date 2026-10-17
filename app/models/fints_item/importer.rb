@@ -19,7 +19,7 @@ class FintsItem::Importer
     linked = fints_item.fints_accounts.joins(:account_provider).to_a
     return { success: true, accounts: [] } if linked.empty?
 
-    windows = linked.map do |account|
+    windows = linked.reject(&:investment?).select(&:transactions_supported?).map do |account|
       from = if account.transactions_synced_through
         account.transactions_synced_through - Rails.configuration.x.fints.sync_lookback_days.days
       else
@@ -27,9 +27,15 @@ class FintsItem::Importer
       end
       { remoteAccountKey: account.remote_account_key, startDate: from.iso8601, endDate: Date.current.iso8601 }
     end
+    holding_keys = linked.select(&:investment?).select(&:holdings_supported?).map(&:remote_account_key)
 
-    result = worker.call(operation: :transactions, credentials: credentials, accountWindows: windows)
-    apply_transaction_result(result)
+    result = worker.call(
+      operation: :sync,
+      credentials: credentials,
+      accountWindows: windows,
+      remoteAccountKeys: holding_keys
+    )
+    apply_sync_result(result)
   end
 
   def continue(operation:, worker_state:, tan:)
@@ -42,7 +48,9 @@ class FintsItem::Importer
     case operation.to_s
     when "discover" then apply_discovery_result(result)
     when "transactions" then apply_transaction_result(result)
-    when "test", "holdings"
+    when "holdings" then apply_holdings_result(result)
+    when "sync" then apply_sync_result(result)
+    when "test"
       persist_session!(result) if result.is_a?(Fints::WorkerClient::Success)
       result
     else
@@ -76,6 +84,32 @@ class FintsItem::Importer
       { success: outcomes.all? { _1[:success] }, accounts: outcomes }
     end
 
+    def apply_holdings_result(result)
+      return result unless result.is_a?(Fints::WorkerClient::Success)
+
+      persist_session!(result)
+      outcomes = result.accounts.filter_map do |snapshot|
+        account = fints_item.fints_accounts.find_by(remote_account_key: snapshot["remoteAccountKey"])
+        next unless account&.account_provider && account.investment?
+
+        process_holdings(account, snapshot)
+      end
+      { success: outcomes.all? { _1[:success] }, accounts: outcomes }
+    end
+
+    def apply_sync_result(result)
+      return result unless result.is_a?(Fints::WorkerClient::Success)
+
+      persist_session!(result)
+      outcomes = result.accounts.filter_map do |snapshot|
+        account = fints_item.fints_accounts.find_by(remote_account_key: snapshot["remoteAccountKey"])
+        next unless account&.account_provider
+
+        account.investment? ? process_holdings(account, snapshot) : process_account(account, snapshot)
+      end
+      { success: outcomes.all? { _1[:success] }, accounts: outcomes }
+    end
+
     def credentials
       {
         bank_code: fints_item.bank_code, endpoint: fints_item.endpoint,
@@ -104,7 +138,8 @@ class FintsItem::Importer
         account_fingerprint: fingerprint(snapshot["iban"] || snapshot["accountNumber"]),
         current_balance: cents_to_decimal(snapshot["balance"]),
         balance_available: !snapshot["balance"].nil?,
-        transactions_supported: snapshot["supportsTransactions"] != false
+        transactions_supported: snapshot["supportsTransactions"] != false,
+        holdings_supported: snapshot["supportsHoldings"] == true
       )
       account.save!
       account
@@ -133,6 +168,33 @@ class FintsItem::Importer
         metadata: { fints_item_id: fints_item.id, fints_account_id: account.id, error_class: error.class.name }
       )
       { fints_account_id: account.id, success: false }
+    end
+
+    def process_holdings(account, snapshot)
+      diagnostic = snapshot["holdingsSync"] || { "status" => "unavailable" }
+      status = diagnostic["status"].to_s
+      status = "unavailable" unless status.in?(FintsAccount::HOLDINGS_STATUSES)
+      account.update!(holdings_status: status)
+
+      outcome = if status == "completed"
+        FintsAccount::HoldingsProcessor.new(account).process(snapshot.fetch("holdings"))
+      end
+      account.update!(holdings_synced_on: outcome.snapshot_date) if outcome&.snapshot_date
+      {
+        fints_account_id: account.id,
+        success: true,
+        holdings_status: status,
+        result: outcome
+      }
+    rescue StandardError => error
+      account.update_columns(holdings_status: "unavailable", updated_at: Time.current)
+      DebugLogEntry.capture(
+        category: "provider_sync_error", level: "error", message: "FinTS holdings import failed",
+        source: self.class.name, provider_key: "fints", family: fints_item.family,
+        account_provider: account.account_provider,
+        metadata: { fints_item_id: fints_item.id, fints_account_id: account.id, error_class: error.class.name }
+      )
+      { fints_account_id: account.id, success: false, holdings_status: "unavailable" }
     end
 
     def cents_to_decimal(value)

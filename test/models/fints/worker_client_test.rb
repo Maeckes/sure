@@ -80,7 +80,7 @@ class Fints::WorkerClientTest < ActiveSupport::TestCase
     end
 
     def ruby_worker(body)
-      Tempfile.create([ "fints-worker", ".rb" ]).tap do |file|
+      Tempfile.new([ "fints-worker", ".rb" ]).tap do |file|
         file.write("require 'json'\n#{body}\n")
         file.flush
       end

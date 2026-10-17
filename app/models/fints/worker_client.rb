@@ -59,7 +59,7 @@ class Fints::WorkerClient
           Timeout.timeout(@timeout) do
             stdin.write(input)
             stdin.close
-            stdout_data = stdout.read(@output_limit + 1)
+            stdout_data = stdout.read(@output_limit + 1).to_s
             raise ProtocolError, "FinTS worker response exceeded the size limit" if stdout_data.bytesize > @output_limit
             status = wait_thread.value
           end

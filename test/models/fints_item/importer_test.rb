@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
-require "test_helper"
+require_relative "../../support/fints_test_helper"
 
 class FintsItem::ImporterTest < ActiveSupport::TestCase
+  include FintsTestHelper
+
   class FakeWorker
     attr_reader :calls
 
@@ -103,7 +105,7 @@ class FintsItem::ImporterTest < ActiveSupport::TestCase
     def account(name, type, key, balance: 12_345)
       {
         "remoteAccountKey" => key * 64, "name" => name, "accountType" => type,
-        "currency" => "EUR", "iban" => "DE44500105175407324931", "accountNumber" => "0001",
+        "currency" => "EUR", "iban" => "DE44500105175407320001", "accountNumber" => "0001",
         "supportsTransactions" => true, "balance" => balance, "transactions" => [],
         "transactionSync" => { "status" => "not_requested", "startDate" => nil, "endDate" => nil }
       }

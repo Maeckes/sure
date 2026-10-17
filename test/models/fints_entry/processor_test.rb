@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
-require "test_helper"
+require_relative "../../support/fints_test_helper"
 
 class FintsEntry::ProcessorTest < ActiveSupport::TestCase
+  include FintsTestHelper
+
   setup do
     item = FintsItem.create!(family: families(:dylan_family), name: "Dummy", bank_name: "Dummy", bank_code: "50010517", endpoint: "https://bank.example/fints", user_id: "dummy", pin: "dummy")
     @remote = item.fints_accounts.create!(remote_account_key: "9" * 64, name: "Giro", currency: "EUR")

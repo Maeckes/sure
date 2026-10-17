@@ -3,6 +3,10 @@
 class FintsItem < ApplicationRecord
   include Syncable, Unlinking, Encryptable, DestroyableLater
 
+  def self.encryption_ready?
+    ActiveRecordEncryptionConfig.ready?
+  end
+
   enum :status, { good: "good", requires_update: "requires_update" }, default: :good
 
   if encryption_ready?

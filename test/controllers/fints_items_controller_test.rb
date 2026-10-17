@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
-require "test_helper"
+require_relative "../support/fints_test_helper"
 
 class FintsItemsControllerTest < ActionDispatch::IntegrationTest
+  include FintsTestHelper
+
   setup do
     sign_in users(:family_admin)
     @family = families(:dylan_family)

@@ -37,6 +37,7 @@ class FintsAccount::HoldingsProcessorTest < ActiveSupport::TestCase
     assert_equal "EUR", imported.currency
     assert_equal Date.current, imported.date
     assert_equal BigDecimal("1249.81"), @account.reload.balance
+    assert_equal Date.current, @account.current_anchor_date
     assert_nil imported.cost_basis
     assert_nil imported.cost_basis_source
     assert_equal Date.current, result.snapshot_date

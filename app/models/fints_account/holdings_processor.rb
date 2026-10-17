@@ -112,7 +112,7 @@ class FintsAccount::HoldingsProcessor
         end
       end
       account.update!(balance: total, cash_balance: 0, currency: fints_account.currency)
-      result = account.set_current_balance(total, schedule_sync: false)
+      result = account.set_current_balance(total, date: snapshot_date, schedule_sync: false)
       raise "Could not set FinTS investment balance" unless result.success?
     end
 

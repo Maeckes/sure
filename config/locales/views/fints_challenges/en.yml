@@ -1,0 +1,16 @@
+en:
+  fints_challenges:
+    cancelled: "Bank confirmation cancelled."
+    completed: "Bank confirmation completed."
+    expired: "This bank confirmation has expired. Start the operation again."
+    invalid: "This bank confirmation is invalid or has already been used."
+    show:
+      title: "Confirm with your bank"
+      tan_label: "TAN"
+      tan_required: "Enter the TAN supplied by your bank."
+      submit_tan: "Confirm"
+      decoupled_instructions: "Approve the request in your banking app, then check the status here."
+      check_status: "Check status"
+      cancel: "Cancel bank confirmation"
+      close: "Close"
+      challenge_image_alt: "Bank confirmation challenge"

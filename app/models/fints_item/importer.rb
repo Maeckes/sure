@@ -12,12 +12,7 @@ class FintsItem::Importer
 
   def discover
     result = worker.call(operation: :discover, credentials: credentials)
-    return result unless result.is_a?(Fints::WorkerClient::Success)
-
-    persist_session!(result)
-    result.accounts.each { upsert_account!(_1) }
-    fints_item.update!(pending_account_setup: fints_item.fints_accounts.needs_setup.exists?)
-    result
+    apply_discovery_result(result)
   end
 
   def import
@@ -34,19 +29,52 @@ class FintsItem::Importer
     end
 
     result = worker.call(operation: :transactions, credentials: credentials, accountWindows: windows)
-    return result unless result.is_a?(Fints::WorkerClient::Success)
+    apply_transaction_result(result)
+  end
 
-    persist_session!(result)
-    outcomes = result.accounts.filter_map do |snapshot|
-      account = fints_item.fints_accounts.find_by(remote_account_key: snapshot["remoteAccountKey"])
-      next unless account&.account_provider
+  def continue(operation:, worker_state:, tan:)
+    result = worker.call(
+      operation: :continue,
+      credentials: credentials,
+      continuation: { operation: operation.to_s, workerState: worker_state, tan: tan.presence }
+    )
 
-      process_account(account, snapshot)
+    case operation.to_s
+    when "discover" then apply_discovery_result(result)
+    when "transactions" then apply_transaction_result(result)
+    when "test", "holdings"
+      persist_session!(result) if result.is_a?(Fints::WorkerClient::Success)
+      result
+    else
+      raise ArgumentError, "unsupported FinTS continuation operation"
     end
-    { success: outcomes.all? { _1[:success] }, accounts: outcomes }
+  ensure
+    tan = nil
   end
 
   private
+
+    def apply_discovery_result(result)
+      return result unless result.is_a?(Fints::WorkerClient::Success)
+
+      persist_session!(result)
+      result.accounts.each { upsert_account!(_1) }
+      fints_item.update!(pending_account_setup: fints_item.fints_accounts.needs_setup.exists?)
+      result
+    end
+
+    def apply_transaction_result(result)
+      return result unless result.is_a?(Fints::WorkerClient::Success)
+
+      persist_session!(result)
+      outcomes = result.accounts.filter_map do |snapshot|
+        account = fints_item.fints_accounts.find_by(remote_account_key: snapshot["remoteAccountKey"])
+        next unless account&.account_provider
+
+        process_account(account, snapshot)
+      end
+      { success: outcomes.all? { _1[:success] }, accounts: outcomes }
+    end
 
     def credentials
       {

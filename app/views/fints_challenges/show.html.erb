@@ -1,0 +1,68 @@
+<%= turbo_frame_tag "modal" do %>
+  <%= render DS::Dialog.new do |dialog| %>
+    <% dialog.with_header(title: t("fints_challenges.show.title")) %>
+
+    <% dialog.with_body do %>
+      <div class="space-y-4">
+        <% if @error_message.present? %>
+          <%= render DS::Alert.new(message: @error_message, variant: :error, live: :assertive) %>
+        <% end %>
+
+        <% if @challenge.present? %>
+          <p class="text-sm text-primary"><%= @challenge.message %></p>
+
+          <% if @challenge.challenge_html.present? %>
+            <p class="text-sm text-secondary"><%= strip_tags(@challenge.challenge_html) %></p>
+          <% end %>
+
+          <% if @challenge.challenge_image.present? %>
+            <div class="rounded-lg border border-primary bg-container-inset p-3">
+              <%= image_tag @challenge.challenge_image,
+                            alt: t("fints_challenges.show.challenge_image_alt"),
+                            class: "max-w-full rounded-md" %>
+            </div>
+          <% end %>
+
+          <% if @challenge.challenge_type == "tan" %>
+            <%= form_with url: continue_fints_item_fints_challenge_path(@fints_item, @challenge_token),
+                          method: :post,
+                          class: "space-y-3",
+                          data: { turbo_frame: "modal", turbo: true } do %>
+              <div class="form-field">
+                <div class="form-field__body">
+                  <%= label_tag :tan, t("fints_challenges.show.tan_label"), class: "form-field__label" %>
+                  <%= password_field_tag :tan, nil,
+                                         autocomplete: "one-time-code",
+                                         inputmode: "numeric",
+                                         maxlength: 100,
+                                         class: "form-field__input" %>
+                </div>
+              </div>
+              <div class="flex justify-end gap-2">
+                <%= render DS::Button.new(text: t("fints_challenges.show.submit_tan"), type: :submit) %>
+              </div>
+            <% end %>
+          <% else %>
+            <%= render DS::Alert.new(message: t("fints_challenges.show.decoupled_instructions"), variant: :info, live: :polite) %>
+            <%= form_with url: continue_fints_item_fints_challenge_path(@fints_item, @challenge_token),
+                          method: :post,
+                          data: { turbo_frame: "modal", turbo: true } do %>
+              <div class="flex justify-end">
+                <%= render DS::Button.new(text: t("fints_challenges.show.check_status"), type: :submit) %>
+              </div>
+            <% end %>
+          <% end %>
+
+          <%= button_to t("fints_challenges.show.cancel"),
+                        cancel_fints_item_fints_challenge_path(@fints_item, @challenge_token),
+                        method: :delete,
+                        class: "text-sm text-secondary underline" %>
+        <% else %>
+          <div class="flex justify-end">
+            <%= render DS::Link.new(text: t("fints_challenges.show.close"), href: accounts_path, variant: :secondary) %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  <% end %>
+<% end %>

@@ -954,6 +954,13 @@ Rails.application.routes.draw do
       post :map_account
       post :sync
     end
+
+    resources :fints_challenges, only: :show, param: :token, path: "challenges" do
+      member do
+        post :continue
+        delete :cancel
+      end
+    end
   end
 
   resources :sophtron_items, only: %i[index new create show edit update destroy] do

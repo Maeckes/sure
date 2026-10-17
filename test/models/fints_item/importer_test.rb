@@ -93,6 +93,41 @@ class FintsItem::ImporterTest < ActiveSupport::TestCase
     assert_equal 2, result[:accounts].size
   end
 
+  test "continues discovery and persists returned client state" do
+    worker = FakeWorker.new([ success(accounts: [ account("Girokonto", "checking", "a") ]) ])
+
+    result = FintsItem::Importer.new(@item, worker: worker).continue(
+      operation: "discover",
+      worker_state: "paused-state",
+      tan: "123456"
+    )
+
+    assert_instance_of Fints::WorkerClient::Success, result
+    assert_equal "opaque-state", @item.reload.client_state
+    assert_equal 1, @item.fints_accounts.count
+    assert_equal({ operation: :continue, credentials: {
+      bank_code: "50010517", endpoint: "https://bank.example/fints",
+      user_id: "dummy-user", customer_id: "dummy-customer", pin: "dummy-pin",
+      client_state: nil, tan_mechanism: nil, tan_medium: nil
+    }, continuation: { operation: "discover", workerState: "paused-state", tan: "123456" } }, worker.calls.sole)
+  end
+
+  test "continues transaction import through the existing processor" do
+    remote = linked_remote("f")
+    snapshot = transaction_account(remote)
+    FintsAccount::Processor.any_instance.expects(:process).with(snapshot["transactions"]).returns(imported: 1)
+    worker = FakeWorker.new([ success(accounts: [ snapshot ]) ])
+
+    result = FintsItem::Importer.new(@item, worker: worker).continue(
+      operation: "transactions",
+      worker_state: "paused-state",
+      tan: nil
+    )
+
+    assert result[:success]
+    assert_equal Date.current, remote.reload.transactions_synced_through
+  end
+
   test "sensitive attributes are encrypted at rest" do
     raw = FintsItem.connection.select_one("SELECT user_id, customer_id, pin FROM fints_items WHERE id = '#{@item.id}'")
     assert_not_equal "dummy-user", raw["user_id"]

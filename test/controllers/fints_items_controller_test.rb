@@ -37,14 +37,29 @@ class FintsItemsControllerTest < ActionDispatch::IntegrationTest
     assert_equal existing, @remote.reload.account
   end
 
-  test "challenge response never exposes worker state or challenge text" do
-    FintsItem.any_instance.expects(:discover_accounts!).returns(Fints::WorkerClient::Challenge.new("tan", "dummy-user dummy-pin", nil, nil, "private-state"))
+  test "challenge response persists encrypted state without exposing it" do
+    FintsItem.any_instance.expects(:discover_accounts!).returns(Fints::WorkerClient::Challenge.new("tan", "Confirm with bank", nil, nil, "private-state"))
 
-    post discover_fints_item_url(@item)
+    post discover_fints_item_url(@item), as: :json
     assert_response :conflict
     assert_equal "challenge_required", response.parsed_body["status"]
+    assert_match(/\A[A-Za-z0-9_-]{40,100}\z/, response.parsed_body["challenge_id"])
     assert_not_includes response.body, "dummy-user"
     assert_not_includes response.body, "dummy-pin"
     assert_not_includes response.body, "private-state"
+    assert_equal 1, FintsChallenge.count
+  end
+
+  test "manual transaction sync surfaces a challenge without enqueueing a job" do
+    FintsItem.any_instance.expects(:import_latest_fints_data).returns(
+      Fints::WorkerClient::Challenge.new("decoupled", "Approve in app", nil, nil, "private-state")
+    )
+
+    assert_no_enqueued_jobs do
+      post sync_fints_item_url(@item), as: :json
+    end
+
+    assert_response :conflict
+    assert_equal "decoupled", response.parsed_body["challenge_type"]
   end
 end

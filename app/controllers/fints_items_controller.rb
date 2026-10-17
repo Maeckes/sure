@@ -18,7 +18,7 @@ class FintsItemsController < ApplicationController
     when Fints::WorkerClient::Success
       render json: { accounts: serialized_accounts }
     when Fints::WorkerClient::Challenge
-      render json: { status: "challenge_required", challenge_type: result.challenge_type, message: "Bank confirmation required." }, status: :conflict
+      render_challenge(result, operation: :discover)
     when Fints::WorkerClient::Failure
       render json: { error: result.message, code: result.code }, status: :unprocessable_entity
     end
@@ -45,8 +45,24 @@ class FintsItemsController < ApplicationController
   end
 
   def sync
-    @fints_item.sync_later
-    head :accepted
+    result = @fints_item.import_latest_fints_data
+    case result
+    when Fints::WorkerClient::Challenge
+      render_challenge(result, operation: :transactions)
+    when Fints::WorkerClient::Failure
+      render json: { error: result.message, code: result.code }, status: :unprocessable_entity
+    else
+      if result.is_a?(Hash) && !result[:success]
+        render json: { error: "The FinTS synchronization could not be completed." }, status: :unprocessable_entity
+      else
+        respond_to do |format|
+          format.html { redirect_to accounts_path, notice: "FinTS synchronization completed." }
+          format.json { render json: { status: "completed" } }
+        end
+      end
+    end
+  rescue Fints::WorkerClient::Error
+    render json: { error: "The FinTS worker could not complete synchronization." }, status: :bad_gateway
   end
 
   def destroy
@@ -78,6 +94,28 @@ class FintsItemsController < ApplicationController
           balance: account.balance_available? ? account.current_balance : nil,
           suggested_subtype: account.suggested_subtype, mapped_account_id: account.account&.id
         }
+      end
+    end
+
+    def render_challenge(result, operation:)
+      issued = FintsChallenge.issue!(
+        result: result,
+        operation: operation,
+        family: Current.family,
+        user: Current.user,
+        fints_item: @fints_item
+      )
+      challenge_path = fints_item_fints_challenge_path(@fints_item, issued.token)
+      respond_to do |format|
+        format.html { redirect_to challenge_path, status: :see_other }
+        format.json do
+          render json: {
+            status: "challenge_required",
+            challenge_type: result.challenge_type,
+            challenge_id: issued.token,
+            challenge_url: challenge_path
+          }, status: :conflict
+        end
       end
     end
 end

@@ -6,7 +6,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fints.exceptions import FinTSDialogInitError, FinTSUnsupportedOperation
+from fints.exceptions import (
+    FinTSClientTemporaryAuthError,
+    FinTSDialogInitError,
+    FinTSUnsupportedOperation,
+)
 from fints.models import SEPAAccount
 from fints.utils import mt940_to_array
 
@@ -195,6 +199,40 @@ class FakeChallenge:
         return b"serialized-challenge"
 
 
+class DecoupledChallenge(FakeChallenge):
+    decoupled = True
+    challenge = "Approve in the banking app"
+
+
+class MatrixChallenge(FakeChallenge):
+    challenge_matrix = ("image/png", b"dummy-image-bytes")
+
+
+class DecoupledChallengeClient(FakeClient):
+    def get_sepa_accounts(self):
+        return DecoupledChallenge()
+
+    def send_tan(self, _challenge, tan):
+        assert tan == ""
+        return [ACCOUNT]
+
+
+class PendingDecoupledClient(DecoupledChallengeClient):
+    def send_tan(self, _challenge, tan):
+        assert tan == ""
+        return DecoupledChallenge()
+
+
+class FailedDecoupledClient(DecoupledChallengeClient):
+    def send_tan(self, _challenge, _tan):
+        raise FinTSClientTemporaryAuthError("private bank detail")
+
+
+class MatrixChallengeClient(FakeClient):
+    def get_sepa_accounts(self):
+        return MatrixChallenge()
+
+
 class HoldingsChallengeClient(HoldingsClient):
     def get_holdings(self, _account):
         return FakeChallenge()
@@ -371,6 +409,103 @@ class AdapterTest(unittest.TestCase):
             result = adapter.run_request(continued)
         self.assertEqual(result["kind"], "success")
         self.assertEqual(result["accounts"][1]["holdingsSync"]["status"], "completed")
+
+    def test_decoupled_challenge_resumes_without_a_tan(self):
+        with patch.object(adapter, "FinTS3PinTanClient", DecoupledChallengeClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ):
+            first = adapter.run_request(request())
+        self.assertEqual(first["challengeType"], "decoupled")
+
+        continued = request("continue")
+        continued["continuation"] = {
+            "operation": "discover",
+            "workerState": first["workerState"],
+            "tan": None,
+        }
+        with patch.object(adapter, "FinTS3PinTanClient", DecoupledChallengeClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ), patch.object(
+            adapter.NeedRetryResponse, "from_data", return_value=DecoupledChallenge()
+        ):
+            result = adapter.run_request(continued)
+
+        self.assertEqual(result["kind"], "success")
+        self.assertEqual(len(result["accounts"]), 1)
+
+    def test_decoupled_pending_returns_fresh_paused_state(self):
+        with patch.object(adapter, "FinTS3PinTanClient", DecoupledChallengeClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ):
+            first = adapter.run_request(request())
+        continued = request("continue")
+        continued["continuation"] = {
+            "operation": "discover",
+            "workerState": first["workerState"],
+            "tan": None,
+        }
+
+        with patch.object(adapter, "FinTS3PinTanClient", PendingDecoupledClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ), patch.object(
+            adapter.NeedRetryResponse, "from_data", return_value=DecoupledChallenge()
+        ):
+            result = adapter.run_request(continued)
+
+        self.assertEqual(result["kind"], "challenge")
+        self.assertEqual(result["challengeType"], "decoupled")
+        self.assertTrue(result["workerState"])
+
+    def test_decoupled_failure_is_safely_mapped(self):
+        with patch.object(adapter, "FinTS3PinTanClient", DecoupledChallengeClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ):
+            first = adapter.run_request(request())
+        continued = request("continue")
+        continued["continuation"] = {
+            "operation": "discover",
+            "workerState": first["workerState"],
+            "tan": None,
+        }
+
+        with patch.object(adapter, "FinTS3PinTanClient", FailedDecoupledClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ), patch.object(
+            adapter.NeedRetryResponse, "from_data", return_value=DecoupledChallenge()
+        ):
+            result = adapter.run_request(continued)
+
+        self.assertEqual(result["kind"], "error")
+        self.assertEqual(result["code"], "AUTHENTICATION_FAILED")
+        self.assertNotIn("private bank detail", json.dumps(result))
+
+    def test_matrix_challenge_is_bounded_base64_data(self):
+        with patch.object(adapter, "FinTS3PinTanClient", MatrixChallengeClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ):
+            result = adapter.run_request(request())
+
+        self.assertEqual(result["kind"], "challenge")
+        self.assertTrue(result["challengeImage"].startswith("data:image/png;base64,"))
+
+    def test_challenge_text_is_redacted(self):
+        challenge = FakeChallenge()
+        challenge.challenge = "dummy-user dummy-pin DE02120300000000202051 123456789"
+
+        class RedactedChallengeClient(FakeClient):
+            def get_sepa_accounts(self):
+                return challenge
+
+        with patch.object(adapter, "FinTS3PinTanClient", RedactedChallengeClient), patch.object(
+            adapter, "NeedTANResponse", FakeChallenge
+        ):
+            result = adapter.run_request(request())
+
+        serialized = json.dumps(result)
+        self.assertNotIn("dummy-user", serialized)
+        self.assertNotIn("dummy-pin", serialized)
+        self.assertNotIn("DE02120300000000202051", serialized)
+        self.assertNotIn("123456789", serialized)
 
     def test_structured_error_details_are_redacted(self):
         with patch.object(adapter, "FinTS3PinTanClient", BankErrorClient):

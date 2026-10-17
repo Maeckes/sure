@@ -134,6 +134,17 @@ not a declaration that the value is Sure cost basis.
 }
 ```
 
+The caller must treat `workerState` as a secret: encrypt it at rest, bind it to
+the authenticated user and connection, expire it quickly, and consume it once.
+It must never be returned to an untrusted client. A `continue` request supplies
+the original operation, the exact state, and either a request-scoped TAN or
+`null` for a decoupled status check.
+
+Each continuation launches a new worker process and restores the paused FinTS
+dialog from `workerState`; no worker remains open while the user approves a
+pushTAN request. If the bank returns another challenge, the caller replaces the
+consumed state but retains the original absolute expiration deadline.
+
 ## Error
 
 ```json

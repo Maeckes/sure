@@ -35,6 +35,27 @@ class Fints::WorkerClientTest < ActiveSupport::TestCase
     script&.close!
   end
 
+  test "accepts a bounded PNG matrix challenge" do
+    image = "data:image/png;base64,iVBORw0KGgo="
+    script = ruby_worker("STDIN.read; STDOUT.write(JSON.generate({kind: 'challenge', challengeType: 'tan', message: 'Confirm', challengeImage: '#{image}', workerState: 'opaque'}))")
+
+    result = client_for(script).call(operation: :discover, credentials: @credentials)
+
+    assert_equal image, result.challenge_image
+  ensure
+    script&.close!
+  end
+
+  test "rejects invalid challenge image content and media types" do
+    script = ruby_worker("STDIN.read; STDOUT.write(JSON.generate({kind: 'challenge', challengeType: 'tan', message: 'Confirm', challengeImage: 'data:text/html;base64,PHNjcmlwdD4=', workerState: 'opaque'}))")
+
+    assert_raises(Fints::WorkerClient::ProtocolError) do
+      client_for(script).call(operation: :discover, credentials: @credentials)
+    end
+  ensure
+    script&.close!
+  end
+
   test "rejects invalid JSON" do
     script = ruby_worker("STDIN.read; STDOUT.write('not-json')")
     assert_raises(Fints::WorkerClient::ProtocolError) { client_for(script).call(operation: :discover, credentials: @credentials) }

@@ -22,6 +22,13 @@ Known follow-ups include full connection-time DNS pinning, TAN mechanism/media
 selection, and photoTAN/Flicker variants not exposed as a matrix image by
 `python-fints`.
 
+Rails stores paused challenge state only as short-lived Active Record encrypted
+data tied to a family, user, and FinTS connection. Text TAN values exist only in
+the authenticated POST request and the single stdin document used for
+`continue`; decoupled approval uses one bounded continue request per explicit
+status check. Neither path uses a background-job argument or keeps a worker
+process open between checks.
+
 The Rails integration requires `FINTS_PRODUCT_ID` to contain the operator's
 registered FinTS product identifier. `FINTS_PYTHON`, `FINTS_WORKER_PATH`,
 `FINTS_WORKER_TIMEOUT`, and `FINTS_WORKER_OUTPUT_LIMIT` are optional runtime

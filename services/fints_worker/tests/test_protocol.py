@@ -48,6 +48,28 @@ class ProtocolTest(unittest.TestCase):
         with self.assertRaises(ProtocolError):
             validate_request(request)
 
+    def test_continue_accepts_tan_or_decoupled_status_check(self):
+        request = base_request("continue")
+        request["continuation"] = {
+            "operation": "discover",
+            "workerState": "opaque-paused-state",
+            "tan": None,
+        }
+        self.assertIsNone(validate_request(request)["continuation"]["tan"])
+
+        request["continuation"]["tan"] = "123456"
+        self.assertEqual(validate_request(request)["continuation"]["tan"], "123456")
+
+    def test_continue_rejects_unstructured_or_executable_state(self):
+        request = base_request("continue")
+        request["continuation"] = {
+            "operation": "__import__",
+            "workerState": "opaque-paused-state",
+            "tan": None,
+        }
+        with self.assertRaises(ProtocolError):
+            validate_request(request)
+
 
 if __name__ == "__main__":
     unittest.main()

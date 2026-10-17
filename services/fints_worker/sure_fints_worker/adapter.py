@@ -117,6 +117,11 @@ def _safe_response_detail(response: Any, request: dict[str, Any]) -> dict[str, s
     if not re.fullmatch(r"[39]\d{3}", code):
         return None
     text = _safe_text(getattr(response, "text", None), 160) or "Bank response"
+    text = _redact_text(text, request)
+    return {"code": code, "message": text}
+
+
+def _redact_text(text: str, request: dict[str, Any]) -> str:
     secrets = [request.get("pin"), request.get("userId"), request.get("customerId")]
     continuation = request.get("continuation")
     if isinstance(continuation, dict):
@@ -126,7 +131,7 @@ def _safe_response_detail(response: Any, request: dict[str, Any]) -> dict[str, s
             text = text.replace(secret, "[redacted]")
     text = re.sub(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b", "[redacted]", text, flags=re.I)
     text = re.sub(r"\b\d{6,}\b", "[redacted]", text)
-    return {"code": code, "message": text}
+    return text
 
 
 def _capture_responses(
@@ -674,9 +679,16 @@ def _pack_challenge(
     return {
         "kind": "challenge",
         "challengeType": "decoupled" if pending.challenge.decoupled else "tan",
-        "message": _safe_text(pending.challenge.challenge, 5000)
-        or "Confirm the request with your bank.",
-        "challengeHtml": _safe_text(pending.challenge.challenge_html, 20_000),
+        "message": _redact_text(
+            _safe_text(pending.challenge.challenge, 5000)
+            or "Confirm the request with your bank.",
+            request,
+        ),
+        "challengeHtml": (
+            _redact_text(html, request)
+            if (html := _safe_text(pending.challenge.challenge_html, 20_000))
+            else None
+        ),
         "challengeImage": image,
         "workerState": json.dumps(state, separators=(",", ":")),
     }

@@ -3,6 +3,7 @@
 require "json"
 require "open3"
 require "timeout"
+require "base64"
 
 class Fints::WorkerClient
   Error = Class.new(StandardError)
@@ -121,7 +122,7 @@ class Fints::WorkerClient
       raise ProtocolError, "Invalid FinTS worker response" unless %w[tan decoupled].include?(value["challengeType"])
       raise ProtocolError, "Invalid FinTS worker response" unless value["message"].bytesize <= 5_000
       raise ProtocolError, "Invalid FinTS worker response" unless optional_string?(value["challengeHtml"], 20_000)
-      raise ProtocolError, "Invalid FinTS worker response" unless optional_string?(value["challengeImage"], 2.megabytes)
+      raise ProtocolError, "Invalid FinTS worker response" unless valid_challenge_image?(value["challengeImage"])
       raise ProtocolError, "Invalid FinTS worker response" unless value["workerState"].bytesize <= 2.megabytes
 
       Challenge.new(value["challengeType"], value["message"], value["challengeHtml"], value["challengeImage"], value["workerState"])
@@ -170,6 +171,18 @@ class Fints::WorkerClient
       return !required if value.nil?
 
       value.is_a?(String) && value.present? && value.bytesize <= maximum
+    end
+
+    def valid_challenge_image?(value)
+      return true if value.nil?
+      return false unless value.is_a?(String) && value.bytesize <= 2.megabytes
+
+      match = value.match(%r{\Adata:(image/(?:png|jpeg));base64,([A-Za-z0-9+/=]+)\z})
+      return false unless match
+
+      Base64.strict_decode64(match[2]).bytesize <= 1.megabyte
+    rescue ArgumentError
+      false
     end
 
     def required_strings!(value, *keys)

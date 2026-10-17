@@ -38,7 +38,7 @@ class CreateFintsItemsAndAccounts < ActiveRecord::Migration[8.1]
       t.timestamps
     end
 
-    add_index :fints_accounts, [ :fints_item_id, :remote_account_key ], unique: true
+    add_index :fints_accounts, [ :fints_item_id, :remote_account_key ], unique: true, name: "index_fints_accounts_on_item_and_remote_key"
     add_index :fints_accounts, :account_fingerprint
   end
 end

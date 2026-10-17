@@ -12,11 +12,15 @@ class Fints::EndpointValidator
     uri = URI.parse(value.to_s)
     raise InvalidEndpoint, "must be an HTTPS URL" unless uri.is_a?(URI::HTTPS) && uri.host.present? && uri.userinfo.nil? && uri.fragment.nil?
 
-    address = IPAddr.new(uri.host)
-    raise InvalidEndpoint, "must not target a private network" if PRIVATE_NETWORKS.any? { _1.include?(address) }
+    begin
+      address = IPAddr.new(uri.host)
+      raise InvalidEndpoint, "must not target a private network" if PRIVATE_NETWORKS.any? { _1.include?(address) }
+    rescue IPAddr::InvalidAddressError
+      raise InvalidEndpoint, "must have a valid public hostname" unless uri.host.match?(/\A(?=.{1,253}\z)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\z/i)
+    end
 
     true
-  rescue URI::InvalidURIError, IPAddr::InvalidAddressError
-    true if uri&.is_a?(URI::HTTPS) && uri.host.present?
+  rescue URI::InvalidURIError
+    raise InvalidEndpoint, "must be an HTTPS URL"
   end
 end

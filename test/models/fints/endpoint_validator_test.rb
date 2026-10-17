@@ -16,4 +16,9 @@ class Fints::EndpointValidatorTest < ActiveSupport::TestCase
   test "rejects URL credentials" do
     assert_raises(Fints::EndpointValidator::InvalidEndpoint) { Fints::EndpointValidator.validate!("https://user:secret@bank.example/fints") }
   end
+
+  test "rejects malformed and single-label hostnames" do
+    assert_raises(Fints::EndpointValidator::InvalidEndpoint) { Fints::EndpointValidator.validate!("https://bank example/fints") }
+    assert_raises(Fints::EndpointValidator::InvalidEndpoint) { Fints::EndpointValidator.validate!("https://localhost/fints") }
+  end
 end

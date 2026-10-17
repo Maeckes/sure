@@ -16,6 +16,7 @@ class Fints::WorkerClient
 
   DEFAULT_TIMEOUT = 30
   DEFAULT_OUTPUT_LIMIT = 2.megabytes
+  ERROR_CODES = %w[AUTHENTICATION_FAILED NETWORK_ERROR UNSUPPORTED BANK_ERROR].freeze
 
   def initialize(
     executable: Rails.configuration.x.fints.python_executable,
@@ -41,7 +42,10 @@ class Fints::WorkerClient
       pin: credentials.fetch(:pin), clientState: credentials[:client_state],
       tanMechanism: credentials[:tan_mechanism], tanMedium: credentials[:tan_medium]
     }.merge(payload)
-    parse(run(JSON.generate(request)))
+    serialized = JSON.generate(request)
+    raise ProtocolError, "FinTS worker request exceeded the size limit" if serialized.bytesize > @output_limit
+
+    parse(run(serialized))
   end
 
   private
@@ -49,7 +53,7 @@ class Fints::WorkerClient
     def run(input)
       stdout_data = nil
       status = nil
-      Open3.popen3(@executable.to_s, @script.to_s) do |stdin, stdout, stderr, wait_thread|
+      Open3.popen3({ "PYTHONUNBUFFERED" => "1" }, @executable.to_s, @script.to_s, unsetenv_others: true) do |stdin, stdout, stderr, wait_thread|
         stderr_reader = Thread.new { drain(stderr) }
         begin
           Timeout.timeout(@timeout) do
@@ -60,10 +64,10 @@ class Fints::WorkerClient
             status = wait_thread.value
           end
         rescue ::Timeout::Error
-          Process.kill("KILL", wait_thread.pid) rescue nil
+          terminate(wait_thread.pid)
           raise TimeoutError, "FinTS worker timed out"
         rescue ProtocolError
-          Process.kill("KILL", wait_thread.pid) rescue nil
+          terminate(wait_thread.pid)
           raise
         ensure
           stdin.close unless stdin.closed?
@@ -79,6 +83,12 @@ class Fints::WorkerClient
     def drain(io)
       loop { break if io.readpartial(16.kilobytes).nil? }
     rescue EOFError, IOError
+      nil
+    end
+
+    def terminate(pid)
+      Process.kill("KILL", pid)
+    rescue Errno::ESRCH
       nil
     end
 
@@ -120,6 +130,7 @@ class Fints::WorkerClient
     def parse_error(value)
       required_strings!(value, "code", "message")
       details = value["details"] || []
+      raise ProtocolError, "Invalid FinTS worker response" unless ERROR_CODES.include?(value["code"])
       raise ProtocolError, "Invalid FinTS worker response" unless value["code"].bytesize <= 100 && value["message"].bytesize <= 2_000
       raise ProtocolError, "Invalid FinTS worker response" unless details.is_a?(Array) && details.size <= 10 && details.all? { _1.is_a?(Hash) && optional_string?(_1["code"], 100, required: true) && optional_string?(_1["message"], 500, required: true) }
 
@@ -130,7 +141,8 @@ class Fints::WorkerClient
       account.is_a?(Hash) && account["remoteAccountKey"].is_a?(String) && account["remoteAccountKey"].match?(/\A[0-9a-f]{64}\z/) &&
         optional_string?(account["name"], 500, required: true) && account["currency"].is_a?(String) && account["currency"].match?(/\A[A-Z]{3}\z/) &&
         (account["balance"].nil? || account["balance"].is_a?(Integer)) && account["transactions"].is_a?(Array) &&
-        account["transactions"].size <= 100_000 && account["transactions"].all? { valid_transaction?(_1) }
+        account["transactions"].size <= 100_000 && account["transactions"].all? { valid_transaction?(_1) } &&
+        valid_transaction_sync?(account["transactionSync"])
     end
 
     def valid_transaction?(transaction)
@@ -140,6 +152,17 @@ class Fints::WorkerClient
 
       true
     rescue Date::Error
+      false
+    end
+
+    def valid_transaction_sync?(value)
+      return false unless value.is_a?(Hash) && %w[not_requested requested completed unsupported unavailable].include?(value["status"])
+      return true unless value["status"] == "completed"
+
+      Date.iso8601(value["startDate"])
+      Date.iso8601(value["endDate"])
+      true
+    rescue Date::Error, TypeError
       false
     end
 

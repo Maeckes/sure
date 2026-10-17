@@ -42,6 +42,13 @@ class Fints::WorkerClientTest < ActiveSupport::TestCase
     script&.close!
   end
 
+  test "rejects unknown structured error codes" do
+    script = ruby_worker("STDIN.read; STDOUT.write(JSON.generate({kind: 'error', code: 'PRIVATE', message: 'no'}))")
+    assert_raises(Fints::WorkerClient::ProtocolError) { client_for(script).call(operation: :discover, credentials: @credentials) }
+  ensure
+    script&.close!
+  end
+
   test "rejects oversized output" do
     script = ruby_worker("STDIN.read; STDOUT.write('x' * 1025)")
     assert_raises(Fints::WorkerClient::ProtocolError) { client_for(script, output_limit: 1024).call(operation: :discover, credentials: @credentials) }
@@ -84,7 +91,7 @@ class Fints::WorkerClientTest < ActiveSupport::TestCase
         "kind" => "success", "clientState" => "opaque", "tanMechanism" => nil, "tanMedium" => nil,
         "accounts" => [ {
           "remoteAccountKey" => "a" * 64, "name" => "Checking", "currency" => "EUR",
-          "transactions" => []
+          "transactions" => [], "transactionSync" => { "status" => "not_requested" }
         } ]
       }
     end

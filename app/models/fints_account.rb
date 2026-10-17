@@ -31,11 +31,14 @@ class FintsAccount < ApplicationRecord
     raise ArgumentError, "unsupported subtype" unless Depository::SUBTYPES.key?(subtype)
 
     transaction do
-      depository = Depository.create!(subtype: subtype)
-      linked = fints_item.family.accounts.create!(
-        accountable: depository, name: name, currency: currency,
-        balance: current_balance || 0, cash_balance: current_balance || 0,
-        institution_name: fints_item.bank_name
+      linked = Account.create_and_sync(
+        {
+          family: fints_item.family, name: name, currency: currency,
+          accountable_type: "Depository", accountable_attributes: { subtype: subtype },
+          balance: current_balance || 0, cash_balance: current_balance || 0,
+          institution_name: fints_item.bank_name
+        },
+        skip_initial_sync: true
       )
       create_account_provider!(account: linked)
       linked

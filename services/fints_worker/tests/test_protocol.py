@@ -6,7 +6,7 @@ from sure_fints_worker.protocol import ProtocolError, validate_request
 def base_request(operation="test"):
     return {
         "operation": operation,
-        "productId": "dummy-registered-product",
+        "productId": "1234567890123456789012345",
         "bankCode": "12345678",
         "endpoint": "https://bank.example/fints",
         "userId": "dummy-user",
@@ -42,6 +42,14 @@ class ProtocolTest(unittest.TestCase):
         request["remoteAccountKeys"] *= 2
         with self.assertRaises(ProtocolError):
             validate_request(request)
+
+    def test_product_id_must_be_exactly_25_characters(self):
+        for product_id in ("1" * 24, "1" * 26):
+            request = base_request()
+            request["productId"] = product_id
+
+            with self.subTest(length=len(product_id)), self.assertRaises(ProtocolError):
+                validate_request(request)
 
     def test_sync_requires_transaction_windows_and_holding_keys(self):
         request = base_request("sync")

@@ -12,6 +12,13 @@
     <div class="space-y-4">
       <%= render DS::Alert.new(message: t(".explanation"), variant: :info) %>
 
+      <div class="flex justify-end">
+        <%= render DS::Button.new(
+              text: t(".discover_accounts"), icon: "search", variant: :secondary,
+              href: discover_fints_item_path(@fints_item), method: :post
+            ) %>
+      </div>
+
       <% @fints_accounts.each do |remote| %>
         <div class="border border-primary rounded-lg p-4 space-y-3">
           <div class="flex items-start justify-between gap-3">

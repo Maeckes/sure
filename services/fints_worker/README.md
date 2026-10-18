@@ -30,7 +30,8 @@ status check. Neither path uses a background-job argument or keeps a worker
 process open between checks.
 
 The Rails integration requires `FINTS_PRODUCT_ID` to contain the operator's
-registered FinTS product identifier. `FINTS_PYTHON`, `FINTS_WORKER_PATH`,
+complete 25-character registered FinTS product identifier. It is passed only
+as the HKVVB product name. `FINTS_PYTHON`, `FINTS_WORKER_PATH`,
 `FINTS_WORKER_TIMEOUT`, and `FINTS_WORKER_OUTPUT_LIMIT` are optional runtime
 settings. Credentials, PINs, TANs, and serialized client/dialog state are never
 configuration variables; they cross the process boundary only in the single

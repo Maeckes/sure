@@ -300,7 +300,7 @@ class BankErrorClient(FakeClient):
 def request(operation="discover"):
     value = {
         "operation": operation,
-        "productId": "dummy-registered-product-id",
+        "productId": "1234567890123456789012345",
         "bankCode": "12030000",
         "endpoint": "https://bank.example/fints",
         "userId": "dummy-user",

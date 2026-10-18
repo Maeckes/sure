@@ -1,9 +1,26 @@
 en:
   fints_items:
+    new:
+      page_title: "Add FinTS connection"
+      title: "Add FinTS connection"
+    form:
+      profile: "Bank profile"
+      ing: "ING Deutschland"
+      custom: "Custom FinTS bank"
+      connection_name: "Connection name"
+      bank_name: "Bank name"
+      bank_code: "Bank code (BLZ)"
+      endpoint: "FinTS endpoint"
+      user_id: "User ID"
+      customer_id: "Customer ID (optional)"
+      pin: "PIN"
+      save: "Save connection"
+      no_bank_request: "Saving stores the encrypted credentials only. Discover accounts is a separate action that contacts the bank."
     accounts:
       page_title: "Set up FinTS accounts"
       title: "FinTS accounts"
       explanation: "Choose which discovered bank accounts to add. Accounts are created only after you confirm a mapping."
+      discover_accounts: "Discover accounts"
       account_summary: "%{type} · %{currency}"
       types:
         depository: "Cash account"

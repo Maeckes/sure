@@ -1,0 +1,20 @@
+de:
+  fints_items:
+    new:
+      page_title: "FinTS-Verbindung hinzufügen"
+      title: "FinTS-Verbindung hinzufügen"
+    form:
+      profile: "Bankprofil"
+      ing: "ING Deutschland"
+      custom: "Andere FinTS-Bank"
+      connection_name: "Name der Verbindung"
+      bank_name: "Bankname"
+      bank_code: "Bankleitzahl (BLZ)"
+      endpoint: "FinTS-Endpunkt"
+      user_id: "Benutzerkennung"
+      customer_id: "Kunden-ID (optional)"
+      pin: "PIN"
+      save: "Verbindung speichern"
+      no_bank_request: "Beim Speichern werden nur die verschlüsselten Zugangsdaten abgelegt. Erst Konten suchen stellt eine Verbindung zur Bank her."
+    accounts:
+      discover_accounts: "Konten suchen"

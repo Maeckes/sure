@@ -1,0 +1,34 @@
+<% if fints_item.errors.any? %>
+  <%= render DS::Alert.new(message: fints_item.errors.full_messages.to_sentence, variant: :error) %>
+<% end %>
+
+<%= styled_form_with model: fints_item,
+                     url: fints_items_path,
+                     scope: :fints_item,
+                     method: :post,
+                     data: { turbo: true },
+                     class: "space-y-3" do |form| %>
+  <%= form.select :profile_id,
+                  options_for_select([[t("fints_items.form.ing"), "ing"], [t("fints_items.form.custom"), "custom"]], profile_id),
+                  { label: t("fints_items.form.profile") },
+                  { required: true } %>
+  <%= form.text_field :name, label: t("fints_items.form.connection_name"), required: true %>
+  <%= form.text_field :bank_name, label: t("fints_items.form.bank_name"), required: true %>
+  <%= form.text_field :bank_code, label: t("fints_items.form.bank_code"), required: true, inputmode: "numeric" %>
+  <%= form.text_field :endpoint, label: t("fints_items.form.endpoint"), required: true, spellcheck: false %>
+  <%= form.text_field :fints_user_id,
+                      label: t("fints_items.form.user_id"), required: true,
+                      value: fints_item.user_id, autocomplete: "off", spellcheck: false %>
+  <%= form.text_field :customer_id,
+                      label: t("fints_items.form.customer_id"),
+                      value: fints_item.customer_id, autocomplete: "off", spellcheck: false %>
+  <%= form.text_field :pin,
+                      label: t("fints_items.form.pin"), type: :password,
+                      value: nil, required: true, autocomplete: "new-password", spellcheck: false %>
+
+  <%= render DS::Alert.new(message: t("fints_items.form.no_bank_request"), variant: :info) %>
+
+  <div class="flex justify-end">
+    <%= render DS::Button.new(text: t("fints_items.form.save"), type: :submit) %>
+  </div>
+<% end %>

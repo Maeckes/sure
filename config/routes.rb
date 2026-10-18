@@ -947,7 +947,7 @@ Rails.application.routes.draw do
     end
   end
 
-  resources :fints_items, only: %i[create destroy] do
+  resources :fints_items, only: %i[new create destroy] do
     member do
       post :discover
       get :accounts

@@ -12,6 +12,96 @@ class FintsItemsControllerTest < ActionDispatch::IntegrationTest
     @remote = @item.fints_accounts.create!(remote_account_key: "a" * 64, name: "Extra-Konto", remote_account_type: "savings", currency: "EUR", iban_mask: "•••• 1234")
   end
 
+  test "authorized admin can render the native credential form" do
+    get new_fints_item_url
+
+    assert_response :success
+    assert_select "form[action=?][method=post]", fints_items_path
+    assert_select "input[name='fints_item[pin]'][type=password][autocomplete=new-password]"
+    assert_select "input[name='fints_item[bank_code]'][value=50010517]"
+    assert_select "input[name='fints_item[endpoint]'][value='https://fints.ing.de/fints/']"
+  end
+
+  test "ING profile creates encrypted credentials from registered bank values without contacting the bank" do
+    Fints::WorkerClient.any_instance.expects(:call).never
+
+    assert_difference "FintsItem.count", 1 do
+      post fints_items_url, params: {
+        fints_item: {
+          profile_id: "ing", name: "My ING", bank_name: "Untrusted",
+          bank_code: "00000000", endpoint: "https://untrusted.example/fints",
+          fints_user_id: "credential-ui-user", customer_id: "credential-ui-customer", pin: "credential-ui-pin"
+        }
+      }
+    end
+
+    created = FintsItem.order(:created_at).last
+    assert_redirected_to accounts_fints_item_path(created)
+    assert_equal "ING Deutschland", created.bank_name
+    assert_equal "50010517", created.bank_code
+    assert_equal "https://fints.ing.de/fints/", created.endpoint
+    assert_equal "credential-ui-user", created.user_id
+    assert_equal "credential-ui-customer", created.customer_id
+    assert_equal "credential-ui-pin", created.pin
+
+    raw = FintsItem.connection.select_one("SELECT user_id, customer_id, pin FROM fints_items WHERE id = #{FintsItem.connection.quote(created.id)}")
+    %w[user_id customer_id pin].each do |field|
+      assert_not_equal credential_value_for(field), raw.fetch(field)
+      assert_not_includes raw.fetch(field), credential_value_for(field)
+    end
+
+    follow_redirect!
+    assert_not_includes response.body, "credential-ui-pin"
+    assert_not_includes response.body, "credential-ui-user"
+  end
+
+  test "custom profile rejects an unsafe endpoint" do
+    assert_no_difference "FintsItem.count" do
+      post fints_items_url, params: {
+        fints_item: {
+          profile_id: "custom", name: "Unsafe", bank_name: "Example", bank_code: "12345678",
+          endpoint: "http://127.0.0.1/fints", fints_user_id: "dummy-user", pin: "dummy-pin"
+        }
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_not_includes response.body, "dummy-pin"
+  end
+
+  test "another family cannot view a FinTS connection" do
+    sign_in users(:empty)
+
+    get accounts_fints_item_url(@item)
+
+    assert_response :not_found
+  end
+
+  test "credential creation remains protected by CSRF" do
+    original = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+
+    post fints_items_url, params: {
+      fints_item: { profile_id: "ing", name: "ING", fints_user_id: "dummy-user", pin: "dummy-pin" }
+    }
+
+    assert_response :unprocessable_entity
+  ensure
+    ActionController::Base.allow_forgery_protection = original
+  end
+
+  test "product id is runtime-only configuration" do
+    assert_not_includes FintsItem.column_names, "product_id"
+    previous = Rails.configuration.x.fints.product_id
+    Rails.configuration.x.fints.product_id = "1234567890123456789012345"
+
+    client = Fints::WorkerClient.new
+
+    assert_equal 25, client.instance_variable_get(:@product_id).length
+  ensure
+    Rails.configuration.x.fints.product_id = previous
+  end
+
   test "lists only masked discovered accounts" do
     get accounts_fints_item_url(@item), as: :json
     assert_response :success
@@ -119,4 +209,14 @@ class FintsItemsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "decoupled", response.parsed_body["challenge_type"]
     assert_equal "sync", FintsChallenge.sole.operation
   end
+
+  private
+
+    def credential_value_for(field)
+      {
+        "user_id" => "credential-ui-user",
+        "customer_id" => "credential-ui-customer",
+        "pin" => "credential-ui-pin"
+      }.fetch(field)
+    end
 end

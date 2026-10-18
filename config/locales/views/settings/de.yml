@@ -227,6 +227,10 @@ de:
       choose_label: (optional)
       change: Foto ändern
     providers:
+      fints_panel:
+        description: "FinTS ist nur im Self-hosted-Modus verfügbar. Zugangsdaten werden verschlüsselt gespeichert; die Kontensuche ist eine separate Aktion."
+        add: "FinTS-Verbindung hinzufügen"
+        manage: "Konten verwalten"
       show:
         coinbase_title: Coinbase
       encryption_error:
@@ -463,6 +467,7 @@ de:
       sync_provider_in_progress: Sync gestartet.
       sync_provider_no_items: Keine Verbindungen zum Synchronisieren vorhanden.
       taglines:
+        fints: Verbindet deutsche Banken direkt über FinTS.
         akahu: Synchronisiert neuseeländische Banken über Akahu.
         binance: Synchronisiert deine Spot-Guthaben bei Binance über einen API-Key mit Lesezugriff.
         brex: Synchronisiert Guthaben und Firmenkartenumsätze bei Brex mit reinem Lesezugriff.

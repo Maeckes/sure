@@ -25,6 +25,20 @@ class Fints::WorkerClientTest < ActiveSupport::TestCase
     script&.close!
   end
 
+  test "rejects product ids that are not exactly 25 characters before spawning the worker" do
+    script = ruby_worker("raise 'must not run'")
+
+    [ "1" * 24, "1" * 26 ].each do |product_id|
+      client = Fints::WorkerClient.new(executable: RbConfig.ruby, script: script.path, product_id: product_id)
+      error = assert_raises(Fints::WorkerClient::ConfigurationError) do
+        client.call(operation: :discover, credentials: @credentials)
+      end
+      assert_equal "FinTS product id must be exactly 25 characters", error.message
+    end
+  ensure
+    script&.close!
+  end
+
   test "returns a typed challenge without persisting a TAN" do
     script = ruby_worker("STDIN.read; STDOUT.write(JSON.generate({kind: 'challenge', challengeType: 'tan', message: 'Confirm', workerState: 'opaque'}))")
     result = client_for(script).call(operation: :discover, credentials: @credentials)
@@ -135,7 +149,7 @@ class Fints::WorkerClientTest < ActiveSupport::TestCase
   private
 
     def client_for(script, timeout: 1, output_limit: 1.megabyte)
-      Fints::WorkerClient.new(executable: RbConfig.ruby, script: script.path, product_id: "dummy-product", timeout: timeout, output_limit: output_limit)
+      Fints::WorkerClient.new(executable: RbConfig.ruby, script: script.path, product_id: "1234567890123456789012345", timeout: timeout, output_limit: output_limit)
     end
 
     def ruby_worker(body)

@@ -13,6 +13,8 @@ x-rails-env: &rails_env
   BUNDLE_PATH: /bundle
   REDIS_URL: redis://redis:6379/1
   SELENIUM_REMOTE_URL: http://selenium:4444
+  SELF_HOSTED: "true"
+  FINTS_PRODUCT_ID: ${FINTS_PRODUCT_ID:-}
 
 services:
   app:

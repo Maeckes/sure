@@ -30,4 +30,16 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
     assert_equal "DE", filtered[:country_code]
     assert_equal "10115", filtered[:postal_code]
   end
+
+  test "filters FinTS credentials and resumable state" do
+    filtered = @filter.filter(
+      fints_item: {
+        fints_user_id: "log-audit-user", customer_id: "log-audit-customer", pin: "log-audit-pin",
+        client_state: "log-audit-client-state", private_state: "log-audit-private-state",
+        worker_state: "log-audit-worker-state", tan: "log-audit-tan"
+      }
+    )
+
+    filtered.fetch(:fints_item).each_value { assert_equal "[FILTERED]", _1 }
+  end
 end

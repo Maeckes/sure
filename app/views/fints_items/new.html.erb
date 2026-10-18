@@ -1,0 +1,8 @@
+<% content_for :title, t(".page_title") %>
+
+<%= render DS::Dialog.new(disable_click_outside: true) do |dialog| %>
+  <% dialog.with_header(title: t(".title")) %>
+  <% dialog.with_body do %>
+    <%= render "form", fints_item: @fints_item, profile_id: @profile_id %>
+  <% end %>
+<% end %>

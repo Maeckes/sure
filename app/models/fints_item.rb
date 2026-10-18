@@ -3,6 +3,8 @@
 class FintsItem < ApplicationRecord
   include Syncable, Unlinking, Encryptable, DestroyableLater
 
+  attr_accessor :profile_id
+
   def self.encryption_ready?
     ActiveRecordEncryptionConfig.ready?
   end

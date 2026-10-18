@@ -30,7 +30,7 @@ class WorkerProtocolTest(unittest.TestCase):
     def test_valid_request_is_dispatched_without_echoing_stdin(self):
         payload = {
             "operation": "test",
-            "productId": "dummy-product",
+            "productId": "1234567890123456789012345",
             "bankCode": "12345678",
             "endpoint": "https://bank.example/fints",
             "userId": "dummy-user",
@@ -55,7 +55,7 @@ class WorkerProtocolTest(unittest.TestCase):
     def test_oversized_response_is_replaced_with_bounded_error(self):
         payload = {
             "operation": "test",
-            "productId": "dummy-product",
+            "productId": "1234567890123456789012345",
             "bankCode": "12345678",
             "endpoint": "https://bank.example/fints",
             "userId": "dummy-user",

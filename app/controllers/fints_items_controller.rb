@@ -3,13 +3,32 @@
 class FintsItemsController < ApplicationController
   before_action :require_admin!
   before_action :require_self_hosted_fints!
-  before_action :set_fints_item, except: :create
+  before_action :set_fints_item, except: %i[new create]
+
+  def new
+    @fints_item = Current.family.fints_items.build(name: "ING FinTS", **Fints::Profile::ING)
+    @fints_item.profile_id = @profile_id = "ing"
+  end
 
   def create
-    item = Current.family.fints_items.create!(fints_item_params)
-    render json: { id: item.id, status: item.status }, status: :created
-  rescue ActiveRecord::RecordInvalid => error
-    render json: { error: error.record.errors.full_messages.to_sentence }, status: :unprocessable_entity
+    @profile_id = params.dig(:fints_item, :profile_id).to_s
+    profile = Fints::Profile.resolve(id: @profile_id, **profile_params.to_h.symbolize_keys)
+    @fints_item = Current.family.fints_items.build(fints_item_params.merge(profile))
+    @fints_item.profile_id = @profile_id
+
+    if @fints_item.save
+      respond_to do |format|
+        format.html { redirect_to accounts_fints_item_path(@fints_item), status: :see_other }
+        format.json { render json: { id: @fints_item.id, status: @fints_item.status }, status: :created }
+      end
+    else
+      render_create_error
+    end
+  rescue Fints::Profile::InvalidProfile => error
+    @fints_item = Current.family.fints_items.build(fints_item_params.except(:pin))
+    @fints_item.profile_id = @profile_id
+    @fints_item.errors.add(:base, error.message)
+    render_create_error
   end
 
   def discover
@@ -96,8 +115,22 @@ class FintsItemsController < ApplicationController
     end
 
     def fints_item_params
-      params.require(:fints_item).permit(:name, :bank_name, :bank_code, :endpoint, :fints_user_id, :customer_id, :pin).tap do |attributes|
+      params.require(:fints_item).permit(:name, :fints_user_id, :customer_id, :pin).tap do |attributes|
         attributes[:user_id] = attributes.delete(:fints_user_id)
+      end
+    end
+
+    def profile_params
+      params.require(:fints_item).permit(:bank_name, :bank_code, :endpoint)
+    end
+
+    def render_create_error
+      respond_to do |format|
+        format.html do
+          @fints_item.pin = nil
+          render :new, status: :unprocessable_entity
+        end
+        format.json { render json: { error: @fints_item.errors.full_messages.to_sentence }, status: :unprocessable_entity }
       end
     end
 

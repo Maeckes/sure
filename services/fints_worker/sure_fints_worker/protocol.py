@@ -95,9 +95,12 @@ def validate_request(value: Any) -> dict[str, Any]:
     operation = _string(value.get("operation"), minimum=1, maximum=20)
     if operation not in OPERATIONS:
         raise ProtocolError("Invalid worker request.")
-    product_id = _string(value.get("productId", ""), maximum=200).strip()
-    if not product_id:
-        raise ProtocolError("A registered FinTS product id is required.", "UNSUPPORTED")
+    product_id = value.get("productId", "")
+    if not isinstance(product_id, str) or len(product_id) != 25:
+        raise ProtocolError(
+            "A registered FinTS product id with exactly 25 characters is required.",
+            "UNSUPPORTED",
+        )
 
     request: dict[str, Any] = {
         "operation": operation,

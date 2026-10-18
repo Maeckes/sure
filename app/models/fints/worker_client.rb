@@ -17,6 +17,7 @@ class Fints::WorkerClient
 
   DEFAULT_TIMEOUT = 30
   DEFAULT_OUTPUT_LIMIT = 2.megabytes
+  PRODUCT_ID_LENGTH = 25
   ERROR_CODES = %w[AUTHENTICATION_FAILED NETWORK_ERROR UNSUPPORTED BANK_ERROR].freeze
 
   def initialize(
@@ -34,7 +35,9 @@ class Fints::WorkerClient
   end
 
   def call(operation:, credentials:, **payload)
-    raise ConfigurationError, "FinTS product id is not configured" if @product_id.blank?
+    unless @product_id.is_a?(String) && @product_id.length == PRODUCT_ID_LENGTH
+      raise ConfigurationError, "FinTS product id must be exactly 25 characters"
+    end
 
     request = {
       operation: operation.to_s, productId: @product_id,

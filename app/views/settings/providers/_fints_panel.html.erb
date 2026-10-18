@@ -1,0 +1,19 @@
+<div id="fints-providers-panel" class="space-y-4">
+  <% items = local_assigns[:fints_items] || @fints_items || Current.family.fints_items.active.ordered %>
+
+  <%= render DS::Alert.new(message: t("settings.providers.fints_panel.description"), variant: :info) %>
+
+  <% items.each do |item| %>
+    <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-container border border-primary">
+      <div>
+        <p class="text-sm font-medium text-primary"><%= item.name %></p>
+        <p class="text-xs text-secondary"><%= item.bank_name %> · <%= item.bank_code %></p>
+      </div>
+      <%= render DS::Link.new(text: t("settings.providers.fints_panel.manage"), href: accounts_fints_item_path(item), variant: :secondary) %>
+    </div>
+  <% end %>
+
+  <div class="flex justify-end">
+    <%= render DS::Link.new(text: t("settings.providers.fints_panel.add"), href: new_fints_item_path, variant: :primary) %>
+  </div>
+</div>

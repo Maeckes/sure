@@ -389,6 +389,10 @@ en:
       choose_label: (optional)
       change: Change photo
     providers:
+      fints_panel:
+        description: "FinTS is available only in self-hosted mode. Credentials are encrypted before storage; discovering accounts is a separate action."
+        add: "Add FinTS connection"
+        manage: "Manage accounts"
       update:
         updated_successfully: Provider settings updated successfully
         no_changes: No changes were made
@@ -452,6 +456,7 @@ en:
       sync_provider_in_progress: Sync started.
       recently_synced: Synced recently. Try again in a moment.
       taglines:
+        fints: Connect German banks directly using FinTS.
         financekit: Sync (some) FinanceKit accounts through the Sure iOS app.
         akahu: Sync New Zealand financial institutions via Akahu.
         simplefin: Connect US bank accounts via the open SimpleFIN protocol.

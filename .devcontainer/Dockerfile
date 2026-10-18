@@ -21,12 +21,21 @@ RUN apt-get update -qq \
     libyaml-0-2 \
     openssh-client \
     postgresql-client \
+    python3 \
+    python3-venv \
     poppler-utils \
     procps \
     vim \
   && rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
 RUN gem install bundler foreman
+
+COPY services/fints_worker/requirements.lock /tmp/fints-requirements.lock
+RUN python3 -m venv /opt/fints-venv \
+  && /opt/fints-venv/bin/pip install --no-cache-dir --no-deps -r /tmp/fints-requirements.lock \
+  && rm /tmp/fints-requirements.lock
+
+ENV FINTS_PYTHON=/opt/fints-venv/bin/python
 
 # Install Node.js 20
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \

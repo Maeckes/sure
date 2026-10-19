@@ -2,12 +2,13 @@
 
 # Conditions for pushing the image to GHCR:
 #   - Triggered by push to default branch (`main`)
+#   - Triggered by push to the maintained FinTS branch (`feature/fints`)
 #   - Triggered by push to a version tag (`v*`)
 #   - Triggered by a scheduled run
 #   - Triggered manually via `workflow_dispatch` with `push: true`
 #
 # Conditional expression:
-#   github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' || github.event.inputs.push
+#   github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/fints' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' || github.event.inputs.push
 
 name: Publish Docker image
 
@@ -29,6 +30,7 @@ on:
       - 'v*'
     branches:
       - main
+      - feature/fints
     paths-ignore:
       - 'charts/**'
       - 'mobile/**'

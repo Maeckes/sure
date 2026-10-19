@@ -17,6 +17,15 @@ class FintsItem::Syncer
       raise Fints::WorkerClient::Error, result.message
     end
     raise Fints::WorkerClient::Error, "FinTS synchronization failed" if result.is_a?(Hash) && !result[:success]
+
+    schedule_results = fints_item.schedule_account_syncs(
+      parent_sync: sync,
+      window_start_date: sync.window_start_date,
+      window_end_date: sync.window_end_date
+    )
+    if schedule_results.any? { _1[:success] == false }
+      raise Fints::WorkerClient::Error, "FinTS account synchronization could not be scheduled"
+    end
   end
 
   def perform_post_sync; end

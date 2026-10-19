@@ -55,6 +55,19 @@ class FintsChallengesControllerTest < ActionDispatch::IntegrationTest
     assert_not FintsChallenge.exists?(issued.challenge.id)
   end
 
+  test "completed sync challenge schedules linked account materialization" do
+    issued = issue(operation: :sync)
+    FintsItem.any_instance.stubs(:continue_fints_challenge!).returns(success)
+    FintsItem.any_instance.expects(:schedule_account_syncs).once.returns([])
+
+    post continue_fints_item_fints_challenge_url(@item, issued.token),
+         params: { tan: "123456" },
+         as: :json
+
+    assert_response :success
+    assert_equal "completed", response.parsed_body["status"]
+  end
+
   test "wrong TAN returns a safe terminal failure and removes state" do
     issued = issue
     FintsItem.any_instance.stubs(:continue_fints_challenge!).returns(
@@ -218,10 +231,10 @@ class FintsChallengesControllerTest < ActionDispatch::IntegrationTest
 
   private
 
-    def issue(type: "tan", message: "Confirm with bank", image: nil, expires_at: 5.minutes.from_now)
+    def issue(type: "tan", message: "Confirm with bank", image: nil, expires_at: 5.minutes.from_now, operation: :discover)
       FintsChallenge.issue!(
         result: worker_challenge(type: type, message: message, image: image),
-        operation: :discover,
+        operation: operation,
         family: @family,
         user: @user,
         fints_item: @item,

@@ -89,6 +89,7 @@ class FintsItemsController < ApplicationController
       if result.is_a?(Hash) && !result[:success]
         render json: { error: "The FinTS synchronization could not be completed." }, status: :unprocessable_entity
       else
+        @fints_item.schedule_account_syncs
         respond_to do |format|
           format.html { redirect_to accounts_path, notice: "FinTS synchronization completed." }
           format.json { render json: { status: "completed" } }

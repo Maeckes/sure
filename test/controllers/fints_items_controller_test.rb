@@ -218,6 +218,16 @@ class FintsItemsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "sync", FintsChallenge.sole.operation
   end
 
+  test "successful manual sync schedules linked account materialization" do
+    FintsItem.any_instance.expects(:import_latest_fints_data).returns(success: true, accounts: [])
+    FintsItem.any_instance.expects(:schedule_account_syncs).once.returns([])
+
+    post sync_fints_item_url(@item), as: :json
+
+    assert_response :success
+    assert_equal "completed", response.parsed_body["status"]
+  end
+
   private
 
     def credential_value_for(field)

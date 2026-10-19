@@ -68,6 +68,26 @@ class FintsItem < ApplicationRecord
     end
   end
 
+  def schedule_account_syncs(parent_sync: nil, window_start_date: nil, window_end_date: nil)
+    accounts.visible.distinct.each_with_object([]) do |account, results|
+      begin
+        account.sync_later(
+          parent_sync: parent_sync,
+          window_start_date: window_start_date,
+          window_end_date: window_end_date
+        )
+        results << { account_id: account.id, success: true }
+      rescue StandardError => error
+        DebugLogEntry.capture(
+          category: "provider_sync_error", level: "error", message: "FinTS account sync scheduling failed",
+          source: self.class.name, provider_key: "fints", family: family, account: account,
+          metadata: { fints_item_id: id, error_class: error.class.name }
+        )
+        results << { account_id: account.id, success: false }
+      end
+    end
+  end
+
   private
 
     def endpoint_is_safe_https

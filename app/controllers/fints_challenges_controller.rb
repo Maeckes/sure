@@ -17,6 +17,7 @@ class FintsChallengesController < ApplicationController
       user: Current.user,
       fints_item: @fints_item
     )
+    operation = challenge.operation
     tan = validated_tan(challenge)
     return if performed?
 
@@ -27,7 +28,7 @@ class FintsChallengesController < ApplicationController
       fints_item: @fints_item,
       tan: tan
     )
-    render_continuation(continuation)
+    render_continuation(continuation, operation: operation)
   rescue FintsChallenge::Expired
     render_expired
   rescue FintsChallenge::Invalid
@@ -83,7 +84,7 @@ class FintsChallengesController < ApplicationController
       value
     end
 
-    def render_continuation(continuation)
+    def render_continuation(continuation, operation:)
       if continuation.issued
         path = fints_item_fints_challenge_path(@fints_item, continuation.issued.token)
         respond_to do |format|
@@ -100,6 +101,7 @@ class FintsChallengesController < ApplicationController
       elsif continuation.result.is_a?(Fints::WorkerClient::Failure)
         render_terminal_error(continuation.result.message, :unprocessable_entity, code: continuation.result.code)
       else
+        @fints_item.schedule_account_syncs if operation.in?(%w[transactions holdings sync])
         respond_to do |format|
           format.html { redirect_to accounts_path, notice: t("fints_challenges.completed") }
           format.json { render json: { status: "completed" } }

@@ -64,6 +64,32 @@ jobs:
             sleep $((attempt * 10))
           done
 
+  test_fints_worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: services/fints_worker/requirements.lock
+
+      - name: Install pinned FinTS worker dependencies
+        run: |
+          python -m venv .venv-fints
+          .venv-fints/bin/python -m pip install --no-cache-dir --no-deps \
+            -r services/fints_worker/requirements.lock
+
+      - name: Test FinTS worker
+        working-directory: services/fints_worker
+        run: ../../.venv-fints/bin/python -m unittest discover -s tests -v
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10

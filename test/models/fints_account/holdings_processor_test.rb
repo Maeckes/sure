@@ -91,6 +91,19 @@ class FintsAccount::HoldingsProcessorTest < ActiveSupport::TestCase
     assert_no_match(/Sensitive fund name/, error.message)
   end
 
+  test "uses the snapshot date for an individual position without a valuation date" do
+    dated = holding(isin: "DE000DUMMY01", name: "Dated fund", date: Date.current - 1)
+    undated = holding(isin: "DE000DUMMY02", name: "Undated fund")
+    undated["valuationDate"] = nil
+
+    result = @processor.process([ dated, undated ])
+
+    assert_equal Date.current - 1, result.snapshot_date
+    imported = @account.holdings.where.not(qty: 0)
+    assert_equal 2, imported.count
+    assert_equal [ Date.current - 1 ], imported.distinct.pluck(:date)
+  end
+
   test "an older snapshot cannot replace the current account value" do
     @processor.process([ holding(date: Date.current, total_value: "1200") ])
     @processor.process([ holding(date: Date.current - 1, total_value: "900") ])

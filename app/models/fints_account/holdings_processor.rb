@@ -15,6 +15,10 @@ class FintsAccount::HoldingsProcessor
 
     positions = Array(raw_holdings).map { normalize(_1) }
     snapshot_date = positions.filter_map { _1[:date] }.max
+    if positions.any? && snapshot_date.nil?
+      raise Fints::HoldingsImportError.new(:missing_valuation_date)
+    end
+    positions.each { _1[:date] ||= snapshot_date }
     previous_snapshot_date = account.latest_provider_holdings_snapshot_date
     previous_holdings = account.current_holdings.where(account_provider_id: account_provider.id).to_a
     imported = []
@@ -58,7 +62,6 @@ class FintsAccount::HoldingsProcessor
       price = decimal(value[:unitPrice])
       amount = decimal(value[:totalValue])
       date = parse_date(value[:valuationDate])
-      raise Fints::HoldingsImportError.new(:missing_valuation_date) unless date
       raise Fints::HoldingsImportError.new(:missing_price_and_value) if price.nil? && amount.nil?
 
       price ||= quantity.zero? ? BigDecimal("0") : amount / quantity

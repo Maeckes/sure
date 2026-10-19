@@ -5,9 +5,10 @@ require "digest"
 class FintsAccount::HoldingsProcessor
   Result = Data.define(:received, :imported, :snapshot_date, :total_value)
 
-  def initialize(fints_account, security_resolver: FintsAccount::SecurityResolver.new(fints_account))
+  def initialize(fints_account, security_resolver: FintsAccount::SecurityResolver.new(fints_account), observed_on: Date.current)
     @fints_account = fints_account
     @security_resolver = security_resolver
+    @observed_on = observed_on
   end
 
   def process(raw_holdings)
@@ -15,9 +16,10 @@ class FintsAccount::HoldingsProcessor
 
     positions = Array(raw_holdings).map { normalize(_1) }
     snapshot_date = positions.filter_map { _1[:date] }.max
-    if positions.any? && snapshot_date.nil?
-      raise Fints::HoldingsImportError.new(:missing_valuation_date)
-    end
+    # python-fints only exposes MT535 :98A::PRIC dates attached to individual
+    # positions. Some banks omit those dates for a complete current snapshot.
+    # In that case the retrieval date is the only trustworthy observation date.
+    snapshot_date ||= observed_on if positions.any?
     positions.each { _1[:date] ||= snapshot_date }
     previous_snapshot_date = account.latest_provider_holdings_snapshot_date
     previous_holdings = account.current_holdings.where(account_provider_id: account_provider.id).to_a
@@ -42,7 +44,7 @@ class FintsAccount::HoldingsProcessor
 
   private
 
-    attr_reader :fints_account, :security_resolver
+    attr_reader :fints_account, :security_resolver, :observed_on
 
     def account
       fints_account.account

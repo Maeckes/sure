@@ -78,17 +78,17 @@ class FintsAccount::HoldingsProcessorTest < ActiveSupport::TestCase
     assert imported.cost_basis_locked?
   end
 
-  test "raises a safe diagnostic code without including holding data" do
-    payload = holding(name: "Sensitive fund name")
+  test "uses the observation date when every position lacks a valuation date" do
+    observed_on = Date.current - 2
+    payload = holding(name: "Undated fund")
     payload["valuationDate"] = nil
+    processor = FintsAccount::HoldingsProcessor.new(@remote, observed_on: observed_on)
 
-    error = assert_raises(Fints::HoldingsImportError) do
-      @processor.process([ payload ])
-    end
+    result = processor.process([ payload ])
 
-    assert_equal "missing_valuation_date", error.code
-    assert_equal "FinTS holdings import failed (missing_valuation_date)", error.message
-    assert_no_match(/Sensitive fund name/, error.message)
+    assert_equal observed_on, result.snapshot_date
+    assert_equal observed_on, @account.holdings.sole.date
+    assert_equal observed_on, @account.current_anchor_date
   end
 
   test "uses the snapshot date for an individual position without a valuation date" do

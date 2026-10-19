@@ -68,12 +68,12 @@ class FintsItemsController < ApplicationController
       remote.create_and_link_account!(name: params[:name].presence || remote.name, subtype: params[:subtype].presence || remote.suggested_subtype)
     end
     respond_to do |format|
-      format.html { redirect_to accounts_fints_item_path(@fints_item), notice: "FinTS account mapped." }
+      format.html { redirect_to accounts_fints_item_path(@fints_item), notice: "FinTS account mapped.", status: :see_other }
       format.json { render json: { account_id: linked.id, fints_account_id: remote.id }, status: :created }
     end
   rescue ActiveRecord::RecordInvalid, ArgumentError => error
     respond_to do |format|
-      format.html { redirect_to accounts_fints_item_path(@fints_item), alert: error.message }
+      format.html { redirect_to accounts_fints_item_path(@fints_item), alert: error.message, status: :see_other }
       format.json { render json: { error: error.message }, status: :unprocessable_entity }
     end
   end

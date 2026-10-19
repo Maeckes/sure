@@ -118,6 +118,14 @@ class FintsItemsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "savings", @remote.reload.account.subtype
   end
 
+  test "HTML mapping redirects with see other for Turbo navigation" do
+    post map_account_fints_item_url(@item), params: { fints_account_id: @remote.id, subtype: "savings" }
+
+    assert_response :see_other
+    assert_redirected_to accounts_fints_item_path(@item)
+    assert_equal "savings", @remote.reload.account.subtype
+  end
+
   test "mapping can use an existing local depository account" do
     existing = @family.accounts.create!(accountable: Depository.create!(subtype: "checking"), name: "Existing", currency: "EUR", balance: 0)
     assert_no_difference "Account.count" do

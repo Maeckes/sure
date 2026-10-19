@@ -40,6 +40,19 @@ class SettingsHelperTest < ActionView::TestCase
     assert_equal({ status: :off }, provider_summary("trading212"))
   end
 
+  test "provider_summary for fints reports sync-based status when connected" do
+    @fints_items = [ OpenStruct.new ]
+    @provider_sync_health = {}
+
+    assert_equal({ status: :ok, last_synced_at: nil }, provider_summary("fints"))
+  end
+
+  test "provider_summary for fints is off without connections" do
+    @fints_items = []
+
+    assert_equal({ status: :off }, provider_summary("fints"))
+  end
+
   test "provider_summary for enable_banking asks for re-consent when the bank rejected an unexpired session" do
     @enable_banking_items = [ EnableBankingItem.new(session_id: "session", session_expires_at: 30.days.from_now, status: :requires_update) ]
 

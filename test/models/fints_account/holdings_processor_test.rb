@@ -63,6 +63,34 @@ class FintsAccount::HoldingsProcessorTest < ActiveSupport::TestCase
     assert_equal BigDecimal("1214.8148"), imported.amount
   end
 
+  test "repeated same-day snapshot preserves a manually locked cost basis" do
+    @processor.process([ holding(quantity: "10") ])
+    @account.holdings.sole.set_manual_cost_basis!(BigDecimal("87.65"))
+
+    assert_nothing_raised do
+      @processor.process([ holding(quantity: "12", total_value: "1214.81481468") ])
+    end
+
+    imported = @account.holdings.sole
+    assert_equal BigDecimal("12"), imported.qty
+    assert_equal BigDecimal("87.65"), imported.cost_basis
+    assert_equal "manual", imported.cost_basis_source
+    assert imported.cost_basis_locked?
+  end
+
+  test "raises a safe diagnostic code without including holding data" do
+    payload = holding(name: "Sensitive fund name")
+    payload["valuationDate"] = nil
+
+    error = assert_raises(Fints::HoldingsImportError) do
+      @processor.process([ payload ])
+    end
+
+    assert_equal "missing_valuation_date", error.code
+    assert_equal "FinTS holdings import failed (missing_valuation_date)", error.message
+    assert_no_match(/Sensitive fund name/, error.message)
+  end
+
   test "an older snapshot cannot replace the current account value" do
     @processor.process([ holding(date: Date.current, total_value: "1200") ])
     @processor.process([ holding(date: Date.current - 1, total_value: "900") ])

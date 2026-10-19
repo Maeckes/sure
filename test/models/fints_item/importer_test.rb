@@ -197,6 +197,11 @@ class FintsItem::ImporterTest < ActiveSupport::TestCase
     assert_equal "unavailable", malformed.reload.holdings_status
     assert_equal "completed", working.reload.holdings_status
     assert_equal 1, working.account.holdings.where.not(qty: 0).count
+
+    diagnostic = DebugLogEntry.where(provider_key: "fints", message: "FinTS holdings import failed").order(:created_at).last
+    assert_equal "Fints::HoldingsImportError", diagnostic.metadata["error_class"]
+    assert_equal "invalid_decimal", diagnostic.metadata["diagnostic_code"]
+    assert_no_match(/not-a-decimal|Dummy Equity Fund/, diagnostic.attributes.to_json)
   end
 
   test "continues a combined holdings sync through the existing challenge path" do

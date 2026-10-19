@@ -13,12 +13,14 @@ class FintsAccount::SecurityResolver
   def resolve(isin:, name:)
     normalized_isin = isin.to_s.strip.upcase.presence
     if normalized_isin
-      raise ArgumentError, "invalid FinTS holding identity" unless normalized_isin.match?(ISIN_PATTERN)
+      unless normalized_isin.match?(ISIN_PATTERN)
+        raise Fints::HoldingsImportError.new(:invalid_security_identity)
+      end
 
       find_or_create!(ticker: normalized_isin, name: name.presence || normalized_isin)
     else
       normalized_name = name.to_s.squish
-      raise ArgumentError, "FinTS holding has no stable identity" if normalized_name.blank?
+      raise Fints::HoldingsImportError.new(:missing_security_identity) if normalized_name.blank?
 
       digest = Digest::SHA256.hexdigest(
         "fints-security:v1:#{@fints_account.remote_account_key}:#{normalized_name.downcase}"

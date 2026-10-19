@@ -192,9 +192,21 @@ class FintsItem::Importer
         category: "provider_sync_error", level: "error", message: "FinTS holdings import failed",
         source: self.class.name, provider_key: "fints", family: fints_item.family,
         account_provider: account.account_provider,
-        metadata: { fints_item_id: fints_item.id, fints_account_id: account.id, error_class: error.class.name }
+        metadata: {
+          fints_item_id: fints_item.id,
+          fints_account_id: account.id,
+          error_class: error.class.name,
+          diagnostic_code: holdings_diagnostic_code(error)
+        }
       )
       { fints_account_id: account.id, success: false, holdings_status: "unavailable" }
+    end
+
+    def holdings_diagnostic_code(error)
+      return error.code if error.is_a?(Fints::HoldingsImportError)
+      return "unexpected_argument_error" if error.is_a?(ArgumentError)
+
+      "unexpected_error"
     end
 
     def cents_to_decimal(value)

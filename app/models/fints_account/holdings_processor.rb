@@ -11,7 +11,7 @@ class FintsAccount::HoldingsProcessor
   end
 
   def process(raw_holdings)
-    raise ArgumentError, "FinTS holdings require an investment account" unless account&.investment?
+    raise Fints::HoldingsImportError.new(:non_investment_account) unless account&.investment?
 
     positions = Array(raw_holdings).map { normalize(_1) }
     snapshot_date = positions.filter_map { _1[:date] }.max
@@ -20,10 +20,16 @@ class FintsAccount::HoldingsProcessor
     imported = []
 
     Account.transaction do
-      positions.each { imported << import_position(_1) }
+      positions.each do |position|
+        imported << with_argument_code(:holding_persistence_argument) { import_position(position) }
+      end
       if snapshot_date && (previous_snapshot_date.nil? || snapshot_date >= previous_snapshot_date)
-        close_missing_positions!(previous_holdings, imported, snapshot_date)
-        update_investment_balance!(imported, snapshot_date)
+        with_argument_code(:missing_position_close_argument) do
+          close_missing_positions!(previous_holdings, imported, snapshot_date)
+        end
+        with_argument_code(:balance_update_argument) do
+          update_investment_balance!(imported, snapshot_date)
+        end
       end
     end
 
@@ -52,16 +58,20 @@ class FintsAccount::HoldingsProcessor
       price = decimal(value[:unitPrice])
       amount = decimal(value[:totalValue])
       date = parse_date(value[:valuationDate])
-      raise ArgumentError, "FinTS holding has no valuation date" unless date
-      raise ArgumentError, "FinTS holding has no price" if price.nil? && amount.nil?
+      raise Fints::HoldingsImportError.new(:missing_valuation_date) unless date
+      raise Fints::HoldingsImportError.new(:missing_price_and_value) if price.nil? && amount.nil?
 
       price ||= quantity.zero? ? BigDecimal("0") : amount / quantity
       amount ||= quantity * price
-      raise ArgumentError, "FinTS holding contains a negative value" if quantity.negative? || price.negative? || amount.negative?
+      if quantity.negative? || price.negative? || amount.negative?
+        raise Fints::HoldingsImportError.new(:negative_value)
+      end
 
       currency = value[:currency].to_s.upcase
       currency = fints_account.currency if currency.blank?
-      raise ArgumentError, "FinTS holding has an invalid currency" unless currency.match?(/\A[A-Z]{3}\z/)
+      unless currency.match?(/\A[A-Z]{3}\z/)
+        raise Fints::HoldingsImportError.new(:invalid_currency)
+      end
 
       {
         isin: value[:isin], name: value[:name].to_s.squish.presence,
@@ -123,15 +133,19 @@ class FintsAccount::HoldingsProcessor
 
     def decimal(value)
       return nil if value.nil?
-      raise ArgumentError, "FinTS holding decimal must be a string" unless value.is_a?(String) || value.is_a?(BigDecimal)
+      unless value.is_a?(String) || value.is_a?(BigDecimal)
+        raise Fints::HoldingsImportError.new(:invalid_decimal)
+      end
 
       BigDecimal(value.to_s)
-    rescue ArgumentError
-      raise ArgumentError, "FinTS holding contains an invalid decimal"
+    rescue ArgumentError => error
+      raise if error.is_a?(Fints::HoldingsImportError)
+
+      raise Fints::HoldingsImportError.new(:invalid_decimal)
     end
 
     def decimal!(value, field:)
-      decimal(value) || raise(ArgumentError, "FinTS holding has no #{field}")
+      decimal(value) || raise(Fints::HoldingsImportError.new("missing_#{field}"))
     end
 
     def parse_date(value)
@@ -141,5 +155,13 @@ class FintsAccount::HoldingsProcessor
       Date.iso8601(value)
     rescue Date::Error
       nil
+    end
+
+    def with_argument_code(code)
+      yield
+    rescue Fints::HoldingsImportError
+      raise
+    rescue ArgumentError
+      raise Fints::HoldingsImportError.new(code)
     end
 end
